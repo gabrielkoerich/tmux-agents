@@ -158,7 +158,6 @@ build() {
   done <<<"$hosts"
 
   add_row ""
-  add_row ""
   add_row " ${c_head}Agents${c_fg}"
   for s in blocked working idle; do
     n=$(printf '%s' "$agents" | grep -c "^$s$sep")
