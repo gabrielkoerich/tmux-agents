@@ -1,0 +1,344 @@
+#!/usr/bin/env bash
+# Sidebar of machines, their spaces and the agents running in them, from the @agent_* options tmux-agents sets
+set -uo pipefail
+
+source "$(dirname "$0")/lib.sh"
+c_head=$'\e[38;5;245m' c_meta=$'\e[38;5;242m' c_name=$'\e[38;5;252m' c_fg=$'\e[39m'
+c_on=$'\e[38;5;71m' c_blocked=$'\e[38;5;203m' c_working=$'\e[38;5;179m' c_idle=$'\e[38;5;245m'
+badge_bgs=(61 72 71 173 132 167 67 137)
+# Marks where a row returns to its own background, so the selected row keeps its highlight
+bg=$'\x01'
+
+fit() {
+  local s=$1 w=$2
+  if (( w <= 0 )); then
+    return
+  fi
+
+  if (( ${#s} > w )); then
+    s="${s:0:w-1}…"
+  fi
+  printf '%s' "$s"
+}
+
+spaces() {
+  if (( $1 > 0 )); then
+    printf '%*s' "$1" ''
+  fi
+}
+
+age() {
+  local d=$(( now - $1 ))
+  if [[ -z $1 ]]; then
+    return
+  elif (( d < 60 )); then
+    echo '<1m'
+  elif (( d < 3600 )); then
+    echo "$(( d / 60 ))m"
+  elif (( d < 86400 )); then
+    echo "$(( d / 3600 ))h"
+  else
+    echo "$(( d / 86400 ))d"
+  fi
+}
+
+add_row() {
+  rows+=("$1")
+  targets+=("${2:-}")
+}
+
+machine_row() {
+  local name target=$2
+  name=$(fit "$1" $(( width - 5 )))
+  add_row " ${c_head}▭ $name$(spaces $(( width - 5 - ${#name} )))${c_on}●${c_fg} " "$target"
+}
+
+space_row() {
+  local name=$1 meta=$2 target=$3 color nw
+  color=${badge_bgs[$(( $(cksum <<<"$name" | cut -d' ' -f1) % ${#badge_bgs[@]} ))]}
+  meta=$(fit "$meta" $(( width / 2 - 2 )))
+  nw=$(( width - 7 - ${#meta} - 1 ))
+  name=$(fit "$name" "$nw")
+  add_row "  "$'\e[48;5;'"${color};38;5;255;1m $(tr '[:lower:]' '[:upper:]' <<<"${name:0:1}") "$'\e[22m'"$bg${c_name} $name$(spaces $(( nw - ${#name} ))) ${c_meta}$meta${c_fg} " "$target"
+}
+
+agent_row() {
+  local state=$1 since=$2 name=$3 detail=$4 target=$5 icon color when lw text
+  case $state in
+    (blocked) icon='!' color=$c_blocked ;;
+    (working) icon='⠿' color=$c_working ;;
+    (*) icon='○' color=$c_idle ;;
+  esac
+  when=$(age "$since")
+  lw=$(( width - 6 - ${#when} ))
+  name=$(fit "$name" "$lw")
+  text=$name
+  if (( lw - ${#name} > 5 )) && [[ -n $detail ]]; then
+    detail=$(fit "$detail" $(( lw - ${#name} - 3 )))
+    text="$name · $detail"
+  fi
+  add_row "  $color$icon ${c_name}$name${c_meta}${text:${#name}}$(spaces $(( lw - ${#text} ))) $when${c_fg} " "$target"
+}
+
+build() {
+  local panes ps_out id pid cmd sess win path active state since wname title host name m n
+  local remote= agents= s
+  rows=() targets=()
+  now=$(date +%s)
+  width=$(tmux display -p -t "$TMUX_PANE" '#{pane_width}')
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{pane_title}")
+  if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
+    ps_out=$(ps -A -o pid=,ppid=,args=)
+  fi
+
+  add_row " ${c_head}Spaces${c_fg}"
+  add_row ""
+  machine_row "This computer" ""
+  while IFS=$sep read -r id pid cmd sess win path active state since wname title; do
+    if [[ $active == 1 ]]; then
+      space_row "$sess" "$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)" "session:$sess"
+    fi
+
+    if [[ $id == "$TMUX_PANE" ]]; then
+      continue
+    fi
+
+    host=
+    if [[ $cmd =~ $ssh_cmds ]]; then
+      host=$(ssh_host_of "$pid" "$ps_out")
+      host=${host:-$wname}
+      m=$(clean_title "$title")
+      if [[ $title =~ :[[:space:]]*(~?/?[^[:space:]]*)$ ]]; then
+        m=${BASH_REMATCH[1]##*/}
+        m=${m:-${BASH_REMATCH[1]}}
+      fi
+      remote+="$host$sep$win$sep$id$sep${m:-$host}$sep$sess"$'\n'
+    fi
+
+    if [[ -n $state ]]; then
+      name=${path##*/}
+      name=${host:-$name}
+      agents+="$state$sep$since$sep$name$sep$(clean_title "$title")$sep$id"$'\n'
+    fi
+  done <<<"$panes"
+
+  n=
+  while IFS=$sep read -r host win id m sess; do
+    if [[ -z $host ]]; then
+      continue
+    fi
+
+    if [[ $host != "$n" ]]; then
+      add_row ""
+      machine_row "$host" "host:$host"
+      n=$host
+    fi
+    space_row "$m" "$sess" "pane:$id@$host"
+  done < <(printf '%s' "$remote" | awk -F "$sep" '!seen[$1 FS $2]++' | sort -s -t "$sep" -k1,1)
+
+  add_row ""
+  add_row ""
+  add_row " ${c_head}Agents${c_fg}"
+  for s in blocked working idle; do
+    n=$(printf '%s' "$agents" | grep -c "^$s$sep")
+    if (( n == 0 )); then
+      continue
+    fi
+
+    add_row ""
+    add_row " ${c_meta}$(tr '[:lower:]' '[:upper:]' <<<"${s:0:1}")${s:1}  $n${c_fg}"
+    while IFS=$sep read -r state since name title id; do
+      agent_row "$state" "$since" "$name" "$title" "pane:$id"
+    done < <(printf '%s' "$agents" | grep "^$s$sep" | sort -t "$sep" -k2,2n)
+  done
+}
+
+draw() {
+  local i height line b frame
+  height=$(tmux display -p -t "$TMUX_PANE" '#{pane_height}')
+  top=0
+  if (( sel >= height )); then
+    top=$(( sel - height + 1 ))
+  fi
+
+  frame=$'\e[?2026h\e[H'
+  for (( i = top; i < ${#rows[@]} && i < top + height; i++ )); do
+    b=$'\e[49m'
+    if (( i == sel )); then
+      b=$'\e[48;5;236m'
+    fi
+
+    line=${rows[i]//$bg/$b}
+    frame+="$b$line"$'\e[K\e[0m'
+    if (( i < top + height - 1 )); then
+      frame+=$'\n'
+    fi
+  done
+  frame+=$'\e[J\e[?2026l'
+
+  # Most scans change nothing, and rewriting the same frame is what makes the pane flicker
+  if [[ $frame != "$last_frame" ]]; then
+    printf '%s' "$frame"
+    last_frame=$frame
+  fi
+}
+
+# Moves the selection to the next row with a target, in the given direction
+step() {
+  local i=$(( sel + $1 ))
+  while (( i >= 0 && i < ${#targets[@]} )); do
+    if [[ -n ${targets[i]} ]]; then
+      sel=$i
+      return
+    fi
+    i=$(( i + $1 ))
+  done
+}
+
+activate() {
+  local target=${targets[sel]:-} new=${1:-} kind name host= client
+  kind=${target%%:*}
+  name=${target#*:}
+  if [[ $kind == pane && $name == *@* ]]; then
+    host=${name#*@}
+    name=${name%%@*}
+  fi
+
+  # A click focuses the sidebar, give focus back so it shows where you are again
+  tmux last-pane -t "$TMUX_PANE" 2>/dev/null
+  # With several terminals attached, switch the one looking at this sidebar, the most recently used
+  client=$(tmux list-clients -t "$(tmux display -p -t "$TMUX_PANE" '#{session_id}')" -F '#{client_activity} #{client_name}' | sort -rn | head -1 | cut -d' ' -f2)
+  case $kind:$new in
+    (session:) tmux switch-client -c "$client" -t "=$name" ;;
+    (pane:) tmux switch-client -c "$client" -t "$name" \; select-window -t "$name" \; select-pane -t "$name" ;;
+    (host:*) tmux new-window -n "$name" "ssh $name" ;;
+    (session:1) tmux new-window -t "=$name:" ;;
+    (pane:1)
+      if [[ -n $host ]]; then
+        tmux new-window -n "$host" "ssh $host"
+      fi
+      ;;
+  esac
+}
+
+# While the sidebar is not focused, highlight where you are: the remote space of the focused pane, or its session
+follow() {
+  local focused win sess active i
+  IFS=' ' read -r focused win sess <<<"$(tmux display -p -t "$TMUX_PANE" '#{pane_active} #{window_id} #{session_name}')"
+  if [[ $focused == 1 ]]; then
+    return
+  fi
+
+  active=$(tmux display -p -t "$win" '#{pane_id}')
+  for i in "${!targets[@]}"; do
+    if [[ ${targets[i]} == "pane:$active@"* ]]; then
+      sel=$i
+      return
+    fi
+  done
+
+  for i in "${!targets[@]}"; do
+    if [[ ${targets[i]} == "session:$sess" ]]; then
+      sel=$i
+      return
+    fi
+  done
+}
+
+sidebar() {
+  local key rest i c b x y tty_saved
+  export LC_ALL=${LC_ALL:-en_US.UTF-8}
+  tmux set -p -t "$TMUX_PANE" @agent_sidebar 1
+  # The alternate screen lets tmux pass the wheel through instead of entering copy mode
+  printf '\e]2;agents\e\\\e[?1049h\e[?25l\e[?1000h\e[?1006h'
+  # Mouse reports arriving between reads would be echoed onto the screen
+  tty_saved=$(stty -g)
+  stty -echo
+  trap 'stty "$tty_saved"; printf "\e[?1006l\e[?1000l\e[?25h\e[?1049l\e[0m"' EXIT
+  sel=-1
+  top=0
+  last_frame=
+  while true; do
+    build
+    if (( sel < 0 || sel >= ${#targets[@]} )) || [[ -z ${targets[sel]:-} ]]; then
+      i=$sel
+      sel=-1
+      step 1
+      if (( sel < 0 )); then
+        sel=$i
+      fi
+    fi
+
+    follow
+    draw
+    key=
+    # A timeout returns 1 in bash 3.2 and above 128 in bash 4, a real Enter returns 0 with an empty key
+    if ! IFS= read -rsn1 -t 2 key; then
+      continue
+    fi
+
+    if [[ $key == $'\e' ]]; then
+      read -rsn2 -t 1 rest
+      key+=$rest
+    fi
+
+    # An SGR mouse report reads ESC [ < button ; column ; row, then M on press or m on release
+    if [[ $key == $'\e[<' ]]; then
+      rest=
+      while IFS= read -rsn1 -t 1 c; do
+        rest+=$c
+        if [[ $c == [Mm] ]]; then
+          break
+        fi
+      done
+
+      IFS=';' read -r b x y <<<"${rest%[Mm]}"
+      case $b:${rest: -1} in
+        (0:M)
+          i=$(( top + y - 1 ))
+          if [[ -n ${targets[i]:-} ]]; then
+            sel=$i
+            activate
+          fi
+          ;;
+        (64:M) step -1 ;;
+        (65:M) step 1 ;;
+      esac
+      continue
+    fi
+
+    case $key in
+      (j | $'\e[B') step 1 ;;
+      (k | $'\e[A') step -1 ;;
+      ('') activate ;;
+      (n) activate 1 ;;
+      ($'\e' | $'\t') tmux last-pane ;;
+      (q) exit 0 ;;
+    esac
+  done
+}
+
+# prefix+a, closes the sidebar of a window or opens one docked left
+toggle() {
+  local win=$1 id
+  id=$(tmux list-panes -t "$win" -F "#{pane_id} #{@agent_sidebar}" | awk '$2 == 1 { print $1; exit }')
+  if [[ -n $id ]]; then
+    tmux kill-pane -t "$id"
+  else
+    tmux split-window -d -t "$win" -hbf -l "$(v=$(tmux show -gqv @agents-sidebar-width); echo "${v:-32}")" "exec $0 sidebar"
+  fi
+}
+
+case ${1:-} in
+  sidebar) sidebar ;;
+  toggle) toggle "${2:-}" ;;
+  build)
+    # Prints the rows without drawing, for tests
+    export LC_ALL=${LC_ALL:-en_US.UTF-8}
+    build
+    for i in "${!rows[@]}"; do
+      printf '%s|%s\n' "${targets[i]}" "${rows[i]}"
+    done
+    ;;
+  *) echo "usage: sidebar sidebar|toggle <window>|build" >&2; exit 2 ;;
+esac
