@@ -2,10 +2,11 @@
 # Keeps a pane attached to a tmux session on a server, so an agent there survives a dropped link
 set -u
 
-host=${1:?usage: connect <host> [session]}
+host=${1:?usage: connect <host> [session] [folder]}
 name=$(printf '%s' "${2:-}" | tr -c 'A-Za-z0-9_-' '-' | sed 's/^-*//; s/-*$//')
-# Down to the second, so two new spaces never share a session
-name=${name:-$(date +%m%d-%H%M%S)}
+# The time and this pane's number, so two new spaces never share a session, even in the same second
+pane_no=${TMUX_PANE:-}
+name=${name:-$(date +%m%d-%H%M%S)${pane_no:+-${pane_no#%}}}
 
 source "$(dirname "$0")/lib.sh"
 
@@ -14,11 +15,22 @@ if [[ -n ${TMUX_PANE:-} ]]; then
   tmux set -p -t "$TMUX_PANE" @remote_session "$name" \; set -p -t "$TMUX_PANE" @ssh_host "${host#*@}" \; set -p -t "$TMUX_PANE" @ssh_user "$(ssh_user_of "$host")"
 fi
 
+# A folder from the pane it splits, so the new session starts where that one is
+dir=${3:-}
+remote="tmux new -A -s '$name'"
+if [[ $dir == "~" ]]; then
+  remote="cd ~ 2>/dev/null; $remote"
+elif [[ $dir == "~/"* ]]; then
+  remote="cd ~/$(printf %q "${dir#\~/}") 2>/dev/null; $remote"
+elif [[ -n $dir ]]; then
+  remote="cd $(printf %q "$dir") 2>/dev/null; $remote"
+fi
+
 delay=2
 while true; do
   started=$(date +%s)
   # ServerAlive notices a dead link in about 45 seconds instead of leaving the pane hanging
-  ssh -t -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "$host" "tmux new -A -s '$name'"
+  ssh -t -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "$host" "$remote"
   code=$?
 
   # 0 is a detach or the session ending, which is on purpose

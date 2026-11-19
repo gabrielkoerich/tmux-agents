@@ -35,7 +35,14 @@ An agent on a server should outlive your connection. `+ new` under a machine in 
 ssh -t <host> "tmux new -A -s <name>"
 ```
 
-The agent lives in that tmux session on the server. When the link drops, `connect` says so and reconnects to the same session, waiting 2 seconds and doubling up to 30. A detach or the session ending stops it. `ServerAliveInterval=15` notices a dead link in about 45 seconds. It names the session after the date and time, like `1119-021530`, unless you pass a name as `connect <host> <name>`. The sidebar names the space after the remote folder or the agent's task, and after the session when the title has neither.
+The agent lives in that tmux session on the server. When the link drops, `connect` says so and reconnects to the same session, waiting 2 seconds and doubling up to 30. A detach or the session ending stops it. `ServerAliveInterval=15` notices a dead link in about 45 seconds. It names the session after the date, time and pane, like `1119-021530-42`, unless you pass a name as `connect <host> <name>`.
+
+`scripts/split h|v <pane>` splits a pane, and in a pane on a server the new pane connects to that server too, in a new session that starts in the folder the title shows. Bind it in place of `split-window`:
+
+```tmux
+bind | run-shell "~/.tmux/plugins/tmux-agents/scripts/split h '#{pane_id}'"
+bind _ run-shell "~/.tmux/plugins/tmux-agents/scripts/split v '#{pane_id}'"
+``` The sidebar names the space after the remote folder or the agent's task, and after the session when the title has neither.
 
 The server needs tmux. Without it `connect` falls back to a plain shell, which a drop ends. For the agent's title to reach your tmux, set this in the server's tmux config:
 

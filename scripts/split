@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Splits a pane, and a pane on a server gets its new pane on that server, in the folder it shows
+set -u
+dir=$(cd "$(dirname "$0")" && pwd)
+source "$dir/lib.sh"
+
+flag=-h
+if [[ ${1:-} == v ]]; then
+  flag=-v
+fi
+
+pane=${2:?usage: split h|v <pane>}
+IFS=$sep read -r cmd host user rsess pid path title <<<"$(tmux display -p -t "$pane" "#{pane_current_command}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@remote_session}$sep#{pane_pid}$sep#{pane_current_path}$sep#{pane_title}")"
+
+if [[ $cmd =~ $ssh_cmds || -n $rsess ]]; then
+  if [[ -z $host ]]; then
+    host=$(ssh_host_of "$pid" "$(ps -A -o pid=,ppid=,args=)")
+  fi
+
+  if [[ -n $host ]]; then
+    folder=
+    if [[ $title =~ :[[:space:]]*(~|~?/[^[:space:]]*)$ ]]; then
+      folder=${BASH_REMATCH[1]}
+    fi
+    tmux split-window "$flag" -t "$pane" "'$dir/connect' '${user:+$user@}$host' '' '$folder'"
+    exit 0
+  fi
+fi
+
+tmux split-window "$flag" -t "$pane" -c "$path"
