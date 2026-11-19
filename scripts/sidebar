@@ -91,11 +91,12 @@ agent_row() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local remote= agents= hosts s
+  local remote= agents= hosts s idx local_host
   rows=() targets=()
   now=$(date +%s)
+  local_host=$(tmux display -p "#{host}")
   width=$(tmux display -p -t "$TMUX_PANE" '#{pane_width}')
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{pane_title}")
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{pane_title}")
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
@@ -103,7 +104,7 @@ build() {
   add_row " ${c_head}Spaces${c_fg}"
   add_row ""
   machine_row "This computer" ""
-  while IFS=$sep read -r id pid cmd sess win path active state since wname title; do
+  while IFS=$sep read -r id pid cmd sess win path active state since wname idx title; do
     if [[ $active == 1 ]]; then
       space_row "$sess" "$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)" "session:$sess"
     fi
@@ -117,11 +118,16 @@ build() {
       host=$(ssh_host_of "$pid" "$ps_out")
       host=${host:-$wname}
       m=$(clean_title "$title")
+      # A pane starts titled with this machine's name, so over ssh that means the remote shell set none
+      if [[ $title == "$local_host" ]]; then
+        m=shell
+      fi
+
       if [[ $title =~ :[[:space:]]*(~?/?[^[:space:]]*)$ ]]; then
         m=${BASH_REMATCH[1]##*/}
         m=${m:-${BASH_REMATCH[1]}}
       fi
-      remote+="$host$sep$win$sep$id$sep${m:-$host}$sep$sess"$'\n'
+      remote+="$host$sep$win$sep$id$sep${m:-shell}$sep$sess:$idx"$'\n'
     fi
 
     if [[ -n $state ]]; then
