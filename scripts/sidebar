@@ -81,7 +81,7 @@ agent_row() {
   case $state in
     (blocked) icon='!' color=$c_blocked ;;
     (asking) icon='?' color=$c_asking ;;
-    (done) icon='●' color=$c_on ;;
+    (waiting) icon='●' color=$c_on ;;
     (working) icon='⠿' color=$c_working ;;
     (*) icon='○' color=$c_idle ;;
   esac
@@ -176,7 +176,7 @@ build() {
 
   add_row ""
   add_row " ${c_head}Agents${c_fg}"
-  for s in blocked asking done working idle; do
+  for s in blocked asking waiting working idle; do
     n=$(printf '%s' "$agents" | grep -c "^$s$sep")
     if (( n == 0 )); then
       continue

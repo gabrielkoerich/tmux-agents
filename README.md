@@ -2,7 +2,7 @@
 
 A tmux plugin that tracks Claude Code, Codex and OpenCode in your panes, on this machine and on servers you reach over ssh. Nothing is installed on the servers and the agents need no hooks.
 
-- A watcher marks each agent `working`, `blocked` on a permission prompt, `asking` when its turn ends on a question, `done` when a turn finished out of view, or `idle` once you have seen it. It sends a desktop notification when an agent out of view finishes or waits on you.
+- A watcher marks each agent `working`, `blocked` on a permission prompt, `asking` when its turn ends on a question, `waiting` when a turn finished and it is your move, or `idle` once it sits untouched for `@agents-idle-after` seconds. It sends a desktop notification when an agent out of view finishes or waits on you.
 - `prefix + Space` opens go to anywhere, a fuzzy list of agents, sessions, windows and the hosts in `~/.ssh/config`.
 - `prefix + a` opens a sidebar with your machines, the spaces on each, and the agents by state.
 
@@ -118,7 +118,7 @@ The sidebar and the picker read a palette from tmux options, the same names the 
 | `@thm_fg` | Names |
 | `@thm_muted` | Headings, meta and idle agents |
 | `@thm_surface` | The selected row |
-| `@thm_green` | Connected machines and done agents |
+| `@thm_green` | Connected machines and waiting agents |
 | `@thm_yellow` | Working agents |
 | `@thm_alert` | Blocked agents |
 | `@thm_blue` | Agents asking a question |
@@ -138,6 +138,7 @@ The picker takes its fzf colours from `@agents-fzf-colors`, so a theme can set t
 | `@agents-headless-sessions` | | Session globs that run a headless agent |
 | `@agents-notify` | `on` | Desktop notifications |
 | `@agents-interval` | `2` | Seconds between scans |
+| `@agents-idle-after` | `600` | Seconds a finished turn waits before it counts as idle |
 | `@agents-popup-style` | `bg=#101010` | Picker background |
 | `@agents-popup-border-style` | `fg=colour238,bg=#101010` | Picker border |
 | `@agents-fzf-colors` | dark, orange accent | fzf `--color` value for the picker |
