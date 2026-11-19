@@ -3,7 +3,7 @@
 A tmux plugin that tracks Claude Code, Codex and OpenCode in your panes, on this machine and on servers you reach over ssh. Nothing is installed on the servers and the agents need no hooks.
 
 - A watcher marks each pane `working`, `blocked` or `idle`, and sends a desktop notification when an agent out of view finishes or waits on you.
-- `prefix + Space` opens a fuzzy list of agents, sessions, windows and the hosts in `~/.ssh/config`. Enter goes there, or opens `ssh <host>` in a new window.
+- `prefix + Space` opens go to anywhere, a fuzzy list of agents, sessions, windows and the hosts in `~/.ssh/config`.
 - `prefix + a` opens a sidebar with your machines, the spaces on each, and the agents by state.
 
 ## Install
@@ -26,6 +26,26 @@ An ssh pane only shows tmux the `ssh` process, so the agent's state has to come 
 Screen reading breaks when an agent changes its UI text. The tests in `tests/fixtures` hold the screens it matches.
 
 The host of an ssh pane comes from the arguments of the local `ssh` process. The watcher stores it in the pane option `@ssh_host`.
+
+## Go to anywhere
+
+`prefix + Space` opens a popup with one list you search by typing:
+
+```
+  ! agent    claude › approve git push      orch · main:2
+  ○ agent    claude › Home Security         homelab · main:1
+    session  work 3 windows
+    window   main:1 claude › Home Security  ~/Projects/homelab
+    server   legion
+```
+
+Agents come first, the blocked ones at the top, each with its task, project and window. Then come sessions, windows, and every `Host` in `~/.ssh/config` and the files it includes.
+
+| Key | Action |
+|---|---|
+| Enter | Go to the agent, session or window, or open `ssh <host>` in a new window |
+| Ctrl-S | Open a server in a new session |
+| Esc | Close |
 
 ## Sidebar
 
