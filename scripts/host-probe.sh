@@ -3,11 +3,13 @@
 tmux ls -F '#{session_name}|#{session_attached}|#{pane_current_path}|#{pane_title}' 2>/dev/null
 echo '--stats--'
 if [ -r /proc/stat ]; then
+  # A second of samples, with time waiting on the disk counted as idle, so a one core box is not read as busy
+  # from the probe starting up
   read -r _ u n s i w q f _ </proc/stat
-  a=$((u + n + s + i + w + q + f)) b=$i
-  sleep 0.5
+  a=$((u + n + s + i + w + q + f)) b=$((i + w))
+  sleep 1
   read -r _ u n s i w q f _ </proc/stat
-  t=$((u + n + s + i + w + q + f - a)) idle=$((i - b))
+  t=$((u + n + s + i + w + q + f - a)) idle=$((i + w - b))
   cpu=0
   if [ "$t" -gt 0 ]; then
     cpu=$((100 * (t - idle) / t))
