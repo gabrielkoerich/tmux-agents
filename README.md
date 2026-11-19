@@ -58,6 +58,7 @@ Agents come first, the blocked ones at the top, each with its task, project and 
 
  ▭ legion                 ●
    O  orch             main
+   +  new
 
  Agents
 
@@ -67,7 +68,13 @@ Agents come first, the blocked ones at the top, each with its task, project and 
   ○ dotfiles · tmux ssh…   1h
 ```
 
-Local sessions are the spaces of this computer. An ssh window is a space of the host it points at, with the local session that holds it on the right. The grey row is where you are, until you focus the sidebar and it becomes the cursor.
+Local sessions are the spaces of this computer. An ssh window is a space of the host it points at, with the local session that holds it on the right.
+
+Machines listed in `@agents-hosts` always show, with a grey ring until you connect to one. Other hosts show while a connection to them is open. `+ new` under a machine opens `ssh <host>` in a new window:
+
+```tmux
+set -g @agents-hosts 'legion m1-max'
+``` The grey row is where you are, until you focus the sidebar and it becomes the cursor.
 
 The sidebar opens without taking focus. Click a row to go there, or scroll with the wheel. With the sidebar focused:
 
@@ -103,6 +110,7 @@ The watcher sets the window option `@agent_alert` to `blocked` or `done` while a
 | `@agents-pick-key` | `Space` | Picker key, after prefix |
 | `@agents-sidebar-key` | `a` | Sidebar key, after prefix |
 | `@agents-sidebar-width` | `32` | Sidebar width in cells |
+| `@agents-hosts` | | Machines the sidebar always shows, in order |
 | `@agents-notify` | `on` | Desktop notifications |
 | `@agents-interval` | `2` | Seconds between scans |
 | `@agents-popup-style` | `bg=#101010` | Picker background |

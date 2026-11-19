@@ -47,10 +47,19 @@ add_row() {
   targets+=("${2:-}")
 }
 
+# A green dot while a connection is open, a grey ring for a pinned machine with none
 machine_row() {
-  local name target=$2
+  local name target=$2 dot=${c_on}●
+  if [[ ${3:-1} != 1 ]]; then
+    dot=${c_meta}○
+  fi
+
   name=$(fit "$1" $(( width - 5 )))
-  add_row " ${c_head}▭ $name$(spaces $(( width - 5 - ${#name} )))${c_on}●${c_fg} " "$target"
+  add_row " ${c_head}▭ $name$(spaces $(( width - 5 - ${#name} )))$dot${c_fg} " "$target"
+}
+
+new_row() {
+  add_row "   ${c_meta}+  new${c_fg}" "host:$1"
 }
 
 space_row() {
@@ -82,7 +91,7 @@ agent_row() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local remote= agents= s
+  local remote= agents= hosts s
   rows=() targets=()
   now=$(date +%s)
   width=$(tmux display -p -t "$TMUX_PANE" '#{pane_width}')
@@ -122,19 +131,25 @@ build() {
     fi
   done <<<"$panes"
 
-  n=
-  while IFS=$sep read -r host win id m sess; do
-    if [[ -z $host ]]; then
+  # Pinned machines first in their order, then any other host with an open connection
+  remote=$(printf '%s' "$remote" | awk -F "$sep" '$1 != "" && !seen[$1 FS $2]++')
+  hosts=$( { tr ' ' '\n' <<<"$(tmux show -gqv @agents-hosts)"; cut -d "$sep" -f1 <<<"$remote" | sort; } | awk 'NF && !seen[$0]++')
+  while read -r n; do
+    if [[ -z $n ]]; then
       continue
     fi
 
-    if [[ $host != "$n" ]]; then
-      add_row ""
-      machine_row "$host" "host:$host"
-      n=$host
+    add_row ""
+    if grep -q "^$n$sep" <<<"$remote"; then
+      machine_row "$n" "host:$n" 1
+      while IFS=$sep read -r host win id m sess; do
+        space_row "$m" "$sess" "pane:$id@$host"
+      done < <(awk -F "$sep" -v h="$n" '$1 == h' <<<"$remote")
+    else
+      machine_row "$n" "host:$n" 0
     fi
-    space_row "$m" "$sess" "pane:$id@$host"
-  done < <(printf '%s' "$remote" | awk -F "$sep" '!seen[$1 FS $2]++' | sort -s -t "$sep" -k1,1)
+    new_row "$n"
+  done <<<"$hosts"
 
   add_row ""
   add_row ""

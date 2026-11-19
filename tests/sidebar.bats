@@ -39,3 +39,13 @@ teardown() {
   TMUX_PANE=$pane run "$bin" build
   [[ $output != *"pane:$pane|"* ]]
 }
+
+@test "pinned machines show with no connection, each with a new row" {
+  tmux set -g @agents-hosts 'legion m1-max'
+  TMUX_PANE=$pane run "$bin" build
+  [[ $output == *"host:legion|"*"legion"* ]]
+  [[ $output == *"host:m1-max|"*"new"* ]]
+  legion=$(grep -n 'host:legion|' <<<"$output" | head -1 | cut -d: -f1)
+  m1=$(grep -n 'host:m1-max|' <<<"$output" | head -1 | cut -d: -f1)
+  [ "$legion" -lt "$m1" ]
+}
