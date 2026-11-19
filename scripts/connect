@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Keeps a pane attached to a tmux session on a server, so an agent there survives a dropped link
+set -u
+
+host=${1:?usage: connect <host> [session]}
+name=$(printf '%s' "${2:-}" | tr -c 'A-Za-z0-9_-' '-' | sed 's/^-*//; s/-*$//')
+name=${name:-$(date +%m%d-%H%M)}
+
+if [[ -n ${TMUX_PANE:-} ]]; then
+  tmux set -p -t "$TMUX_PANE" @remote_session "$name"
+fi
+
+delay=2
+while true; do
+  started=$(date +%s)
+  # ServerAlive notices a dead link in about 45 seconds instead of leaving the pane hanging
+  ssh -t -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "$host" "tmux new -A -s '$name'"
+  code=$?
+
+  # 0 is a detach or the session ending, which is on purpose
+  if [[ $code -eq 0 ]]; then
+    exit 0
+  fi
+
+  # The server has no tmux, so settle for a plain shell that a drop will end
+  if [[ $code -eq 127 ]]; then
+    printf '\ntmux is not installed on %s, opening a plain shell\n' "$host"
+    exec ssh "$host"
+  fi
+
+  if (( $(date +%s) - started > 30 )); then
+    delay=2
+  fi
+
+  printf '\n\033[2mconnection to %s lost (exit %s), reconnecting to %s in %ss, Ctrl-C to stop\033[0m\n' "$host" "$code" "$name" "$delay"
+  sleep "$delay"
+  if (( delay < 30 )); then
+    delay=$(( delay * 2 ))
+  fi
+done

@@ -98,13 +98,13 @@ agent_row() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local remote= agents= hosts s idx local_host headless p
+  local remote= agents= hosts s idx local_host headless p rsess
   rows=() targets=()
   load_palette
   now=$(date +%s)
   local_host=$(tmux display -p "#{host}")
   width=$(tmux display -p -t "$TMUX_PANE" '#{pane_width}')
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{pane_title}")
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{@remote_session}$sep#{pane_title}")
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
@@ -113,7 +113,7 @@ build() {
   add_row ""
   machine_row "This computer" ""
   headless=$(v=$(tmux show -gqv @agents-headless-sessions); echo "$v")
-  while IFS=$sep read -r id pid cmd sess win path active state since wname idx title; do
+  while IFS=$sep read -r id pid cmd sess win path active state since wname idx rsess title; do
     if [[ -n $headless ]] && headless_session "$sess" "$headless"; then
       if [[ -n $state ]]; then
         p=${path%/*}
@@ -144,6 +144,8 @@ build() {
         m=${BASH_REMATCH[1]##*/}
         m=${m:-${BASH_REMATCH[1]}}
       fi
+      # A pane that connect opened keeps the remote session's name, steadier than any title
+      m=${rsess:-$m}
       remote+="$host$sep$win$sep$id$sep${m:-shell}$sep$sess:$idx"$'\n'
     fi
 
@@ -232,6 +234,13 @@ step() {
   done
 }
 
+# Asks for a name, then opens a window that stays attached to that tmux session on the host
+new_space() {
+  local connect
+  connect="$(cd "$(dirname "$0")" && pwd)/connect"
+  tmux command-prompt -t "$1" -p "new space on $2:" "new-window \"'$connect' '$2' '%%'\""
+}
+
 activate() {
   local target=${targets[sel]:-} new=${1:-} kind name host= client
   kind=${target%%:*}
@@ -248,11 +257,11 @@ activate() {
   case $kind:$new in
     (session:) tmux switch-client -c "$client" -t "=$name" ;;
     (pane:) tmux switch-client -c "$client" -t "$name" \; select-window -t "$name" \; select-pane -t "$name" ;;
-    (host:*) tmux new-window "ssh $name" ;;
+    (host:*) new_space "$client" "$name" ;;
     (session:1) tmux new-window -t "=$name:" ;;
     (pane:1)
       if [[ -n $host ]]; then
-        tmux new-window "ssh $host"
+        new_space "$client" "$host"
       fi
       ;;
   esac

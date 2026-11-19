@@ -27,6 +27,23 @@ Screen reading breaks when an agent changes its UI text. The tests in `tests/fix
 
 The host of an ssh pane comes from the arguments of the local `ssh` process. The watcher stores it in the pane option `@ssh_host`.
 
+## Remote agents
+
+An agent on a server should outlive your connection. `+ new` under a machine in the sidebar, or Enter on a server in the picker, asks for a name and opens `scripts/connect <host> <name>`, which runs:
+
+```sh
+ssh -t <host> "tmux new -A -s <name>"
+```
+
+The agent lives in that tmux session on the server. When the link drops, `connect` says so and reconnects to the same session, waiting 2 seconds and doubling up to 30. A detach or the session ending stops it. `ServerAliveInterval=15` notices a dead link in about 45 seconds. The sidebar names the space after the remote session.
+
+The server needs tmux. Without it `connect` falls back to a plain shell, which a drop ends. For the agent's title to reach your tmux, set this in the server's tmux config:
+
+```tmux
+set -g set-titles on
+set -g set-titles-string '#{pane_title}'
+```
+
 A headless agent, such as `claude -p` run by an orchestrator, draws no screen and sets no title. If it runs in its own tmux session, list those sessions in `@agents-headless-sessions` and the watcher marks them working while the session exists. They leave the spaces of this computer, and the sidebar names each after its worktree folder, so `~/.orch/worktrees/orch/internal-42-fix-login` shows as `orch · fix-login`:
 
 ```tmux
