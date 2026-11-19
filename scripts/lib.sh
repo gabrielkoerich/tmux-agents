@@ -39,3 +39,24 @@ clean_title() {
   done
   echo "$t"
 }
+
+# True when a session matches one of the space separated globs in @agents-headless-sessions
+headless_session() {
+  local p pats
+  read -r -a pats <<<"$2"
+  for p in "${pats[@]}"; do
+    if [[ $1 == $p ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# A runner that works in a worktree names the task after its folder, minus a leading id like internal-596326-
+task_name() {
+  local slug=${1##*/}
+  if [[ $slug =~ ^[A-Za-z]+-[0-9]+-(.+)$ ]]; then
+    slug=${BASH_REMATCH[1]}
+  fi
+  echo "$slug"
+}

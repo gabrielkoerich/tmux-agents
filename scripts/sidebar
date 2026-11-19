@@ -91,7 +91,7 @@ agent_row() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local remote= agents= hosts s idx local_host
+  local remote= agents= hosts s idx local_host headless p
   rows=() targets=()
   now=$(date +%s)
   local_host=$(tmux display -p "#{host}")
@@ -104,7 +104,16 @@ build() {
   add_row " ${c_head}Spaces${c_fg}"
   add_row ""
   machine_row "This computer" ""
+  headless=$(v=$(tmux show -gqv @agents-headless-sessions); echo "$v")
   while IFS=$sep read -r id pid cmd sess win path active state since wname idx title; do
+    if [[ -n $headless ]] && headless_session "$sess" "$headless"; then
+      if [[ -n $state ]]; then
+        p=${path%/*}
+        agents+="$state$sep$since$sep${p##*/}$sep$(task_name "$path")$sep$id"$'\n'
+      fi
+      continue
+    fi
+
     if [[ $active == 1 ]]; then
       space_row "$sess" "$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)" "session:$sess"
     fi

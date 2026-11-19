@@ -27,6 +27,12 @@ Screen reading breaks when an agent changes its UI text. The tests in `tests/fix
 
 The host of an ssh pane comes from the arguments of the local `ssh` process. The watcher stores it in the pane option `@ssh_host`.
 
+A headless agent, such as `claude -p` run by an orchestrator, draws no screen and sets no title. If it runs in its own tmux session, list those sessions in `@agents-headless-sessions` and the watcher marks them working while the session exists. They leave the spaces of this computer, and the sidebar names each after its worktree folder, so `~/.orch/worktrees/orch/internal-42-fix-login` shows as `orch · fix-login`:
+
+```tmux
+set -g @agents-headless-sessions 'orch-*'
+```
+
 ## Go to anywhere
 
 `prefix + Space` opens a popup with one list you search by typing:
@@ -111,6 +117,7 @@ The watcher sets the window option `@agent_alert` to `blocked` or `done` while a
 | `@agents-sidebar-key` | `a` | Sidebar key, after prefix |
 | `@agents-sidebar-width` | `32` | Sidebar width in cells |
 | `@agents-hosts` | | Machines the sidebar always shows, in order |
+| `@agents-headless-sessions` | | Session globs that run a headless agent |
 | `@agents-notify` | `on` | Desktop notifications |
 | `@agents-interval` | `2` | Seconds between scans |
 | `@agents-popup-style` | `bg=#101010` | Picker background |

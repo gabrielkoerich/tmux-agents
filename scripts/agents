@@ -83,12 +83,13 @@ notify() {
 }
 
 scan() {
-  local panes id win cmd prev cur visible place pss pid host since found title state alert ps_out=
+  local panes id win cmd prev cur visible place pss pid host since found title state alert headless ps_out=
   panes=$(tmux list-panes -a -F "#{pane_id}$sep#{window_id}$sep#{pane_current_command}$sep#{@agent_state}$sep#{@agent_alert}$sep#{&&:#{window_active},#{session_attached}}$sep#{session_name}:#{window_index}$sep#{pane_program_status_states}$sep#{pane_pid}$sep#{@ssh_host}$sep#{@agent_since}$sep#{pane_title}") || exit 0
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
 
+  headless=$(option @agents-headless-sessions '')
   while IFS=$sep read -r id win cmd prev cur visible place pss pid host since title; do
     # tmux only sees the local ssh process, so keep its host for window names and the sidebar
     if [[ $cmd =~ $ssh_cmds ]]; then
@@ -101,8 +102,11 @@ scan() {
     fi
 
     state=
+    # A headless agent such as claude -p draws no screen, so its session existing is all there is to read
+    if [[ -n $headless ]] && headless_session "${place%:*}" "$headless"; then
+      state=working
     # OSC 7501 states need a tmux that keeps them, stock tmux leaves the field empty and the screen decides
-    if [[ -n $pss && ( $cmd =~ $agent_cmds || $cmd =~ $ssh_cmds ) ]]; then
+    elif [[ -n $pss && ( $cmd =~ $agent_cmds || $cmd =~ $ssh_cmds ) ]]; then
       state=$(program_status "$pss")
     elif [[ $cmd =~ $agent_cmds || $cmd =~ $ssh_cmds || $title == *✳* ]]; then
       state=$(tmux capture-pane -p -t "$id" | classify)

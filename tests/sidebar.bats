@@ -49,3 +49,16 @@ teardown() {
   m1=$(grep -n 'host:m1-max|' <<<"$output" | head -1 | cut -d: -f1)
   [ "$legion" -lt "$m1" ]
 }
+
+@test "headless sessions leave the spaces and show as working agents named after their worktree" {
+  mkdir -p "$BATS_TEST_TMPDIR/worktrees/orch/internal-42-fix-login"
+  tmux new -d -s orch-orch-internal-42 -c "$BATS_TEST_TMPDIR/worktrees/orch/internal-42-fix-login"
+  tmux set -g @agents-headless-sessions 'orch-*'
+  "$BATS_TEST_DIRNAME/../scripts/agents" watch &
+  sleep 3
+  kill $!
+  TMUX_PANE=$pane run "$bin" build
+  [[ $output != *"session:orch-orch-internal-42|"* ]]
+  [[ $output == *"Working"* ]]
+  [[ $output == *"orch"*"fix-login"* ]]
+}
