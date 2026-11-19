@@ -114,6 +114,8 @@ build() {
   machine_row "This computer" ""
   headless=$(v=$(tmux show -gqv @agents-headless-sessions); echo "$v")
   while IFS=$sep read -r id pid cmd sess win path active state since wname idx rsess shost suser title; do
+    title=$(plain "$title")
+    wname=$(plain "$wname")
     if [[ -n $headless ]] && headless_session "$sess" "$headless"; then
       if [[ -n $state ]]; then
         p=${path%/*}

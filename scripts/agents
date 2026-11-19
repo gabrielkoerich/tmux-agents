@@ -248,6 +248,8 @@ pick() {
     {
       tmux list-panes -a -F "#{@agent_state}$sep#{pane_id}$sep#{pane_title}$sep#{session_name}:#{window_index}$sep#{pane_current_command}$sep#{@ssh_host}$sep#{pane_current_path}" |
         while IFS=$sep read -r state id title place cmd shost path; do
+          title=$(plain "$title")
+          place=$(plain "$place")
           case $state in
             (blocked) icon="${c_blocked}!" ;;
             (asking) icon="${c_asking}?" ;;
@@ -263,8 +265,15 @@ pick() {
           fi
           printf '%s%s%s%s %sagent%s    %-44s %s%s · %s%s\n' "$(rank "$state")" "$sep" "pane:$id$sep" "$icon" "$dim" "$off" "$cmd › $(clean_title "$title")" "$dim" "${path##*/}" "$place" "$off"
         done | sort -s -t "$sep" -k1,1n | cut -d "$sep" -f2-
-      tmux list-sessions -F "session:#{session_name}$sep  ${dim}session${off}  #{session_name} ${dim}#{session_windows} windows${off}"
-      tmux list-windows -a -F "pane:#{pane_id}$sep  ${dim}window${off}   #{session_name}:#{window_index} #{window_name} ${dim}#{s|$HOME|~|:pane_current_path}${off}"
+      tmux list-sessions -F "#{session_name}$sep#{session_windows}" | while IFS=$sep read -r name count; do
+        name=$(plain "$name")
+        printf 'session:%s%s  %ssession%s  %s %s%s windows%s\n' "$name" "$sep" "$dim" "$off" "$name" "$dim" "$count" "$off"
+      done
+      # A window name follows its pane's title, so it is plain text before the picker adds its colours
+      tmux list-windows -a -F "#{pane_id}$sep#{session_name}:#{window_index}$sep#{window_name}$sep#{s|$HOME|~|:pane_current_path}" |
+        while IFS=$sep read -r id place name path; do
+          printf 'pane:%s%s  %swindow%s   %s %s %s%s%s\n' "$id" "$sep" "$dim" "$off" "$(plain "$place")" "$(plain "$name")" "$dim" "$(plain "$path")" "$off"
+        done
       ssh_hosts "$ssh_config" | awk '!seen[$0]++' | while read -r name; do
         printf 'ssh:%s%s  %sserver%s   %s\n' "$name" "$sep" "$dim" "$off" "$name"
       done

@@ -31,9 +31,14 @@ ssh_host_of() {
   ssh_target "${args#"${args%%[![:space:]]*}"}"
 }
 
+# A title comes from whatever runs in the pane, a server too, so only plain text of it ever reaches a screen
+plain() {
+  printf '%s' "${1//[[:cntrl:]]/}"
+}
+
 # Agents prefix their title with a state glyph, ✳ idle or ◐ working, which is noise in a name
 clean_title() {
-  local t=$1
+  local t=${1//[[:cntrl:]]/}
   while [[ $t =~ ^[^[:alnum:][:space:]]+[[:space:]]+(.*)$ ]]; do
     t=${BASH_REMATCH[1]}
   done

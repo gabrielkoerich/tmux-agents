@@ -37,3 +37,9 @@ setup() {
   HOME="$BATS_TEST_TMPDIR" TMUX_AGENTS_SSH_CONFIG="$fx/ssh_config" run "$bin" hosts
   [ "$output" = "$(printf '192.0.2.7\nm1-max\nm1\nlegion')" ]
 }
+
+@test "plain keeps only the text of a title, no escape sequences" {
+  source "$BATS_TEST_DIRNAME/../scripts/lib.sh"
+  [ "$(plain "$(printf 'fix\033]52;c;ZXZpbA==\007 login\033[2J')")" = "fix]52;c;ZXZpbA== login[2J" ]
+  [ "$(clean_title "$(printf '\033[31m✳ task\a')")" = "[31m✳ task" ]
+}
