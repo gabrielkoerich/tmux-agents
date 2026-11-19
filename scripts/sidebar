@@ -144,8 +144,10 @@ build() {
         m=${BASH_REMATCH[1]##*/}
         m=${m:-${BASH_REMATCH[1]}}
       fi
-      # A pane that connect opened keeps the remote session's name, steadier than any title
-      m=${rsess:-$m}
+      # The folder or the agent's task reads best, the session connect named is the fallback
+      if [[ $m == shell || -z $m ]]; then
+        m=${rsess:-shell}
+      fi
       remote+="$host$sep$win$sep$id$sep${m:-shell}$sep$sess:$idx"$'\n'
     fi
 
@@ -234,11 +236,11 @@ step() {
   done
 }
 
-# Asks for a name, then opens a window that stays attached to that tmux session on the host
+# Opens a window in the session you are in, attached to a new tmux session on the host that connect names
 new_space() {
   local connect
   connect="$(cd "$(dirname "$0")" && pwd)/connect"
-  tmux command-prompt -t "$1" -p "new space on $2:" "new-window \"'$connect' '$2' '%%'\""
+  tmux new-window -t "$(tmux display -p -c "$1" '#{session_name}'):" "'$connect' '$2'"
 }
 
 activate() {

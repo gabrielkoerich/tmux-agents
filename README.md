@@ -29,13 +29,13 @@ The host of an ssh pane comes from the arguments of the local `ssh` process. The
 
 ## Remote agents
 
-An agent on a server should outlive your connection. `+ new` under a machine in the sidebar, or Enter on a server in the picker, asks for a name and opens `scripts/connect <host> <name>`, which runs:
+An agent on a server should outlive your connection. `+ new` under a machine in the sidebar, or Enter on a server in the picker, opens `scripts/connect <host>` in a new window, which runs:
 
 ```sh
 ssh -t <host> "tmux new -A -s <name>"
 ```
 
-The agent lives in that tmux session on the server. When the link drops, `connect` says so and reconnects to the same session, waiting 2 seconds and doubling up to 30. A detach or the session ending stops it. `ServerAliveInterval=15` notices a dead link in about 45 seconds. The sidebar names the space after the remote session.
+The agent lives in that tmux session on the server. When the link drops, `connect` says so and reconnects to the same session, waiting 2 seconds and doubling up to 30. A detach or the session ending stops it. `ServerAliveInterval=15` notices a dead link in about 45 seconds. It names the session after the date and time, like `1119-021530`, unless you pass a name as `connect <host> <name>`. The sidebar names the space after the remote folder or the agent's task, and after the session when the title has neither.
 
 The server needs tmux. Without it `connect` falls back to a plain shell, which a drop ends. For the agent's title to reach your tmux, set this in the server's tmux config:
 

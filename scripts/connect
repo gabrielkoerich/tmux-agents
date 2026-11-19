@@ -4,7 +4,8 @@ set -u
 
 host=${1:?usage: connect <host> [session]}
 name=$(printf '%s' "${2:-}" | tr -c 'A-Za-z0-9_-' '-' | sed 's/^-*//; s/-*$//')
-name=${name:-$(date +%m%d-%H%M)}
+# Down to the second, so two new spaces never share a session
+name=${name:-$(date +%m%d-%H%M%S)}
 
 if [[ -n ${TMUX_PANE:-} ]]; then
   tmux set -p -t "$TMUX_PANE" @remote_session "$name"
