@@ -138,8 +138,8 @@ build() {
       fi
       host=${host:-$wname}
       m=$(clean_title "$title")
-      # A pane starts titled with this machine's name, so over ssh that means the remote shell set none
-      if [[ $title == "$local_host" ]]; then
+      # A pane starts titled with this machine's name, and a bare user@host has no folder, so neither names a space
+      if [[ $title == "$local_host" || ( $title =~ ^[^[:space:]:]+@[^[:space:]:]+([[:space:]]|$) && $title != *:* ) ]]; then
         m=shell
       fi
 
