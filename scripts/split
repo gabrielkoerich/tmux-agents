@@ -20,6 +20,7 @@ if [[ $cmd =~ $ssh_cmds || -n $rsess ]]; then
   if [[ -n $host ]]; then
     folder=
     # The title comes from the server, so take only plain path characters from it
+    title=$(plain "$title")
     if [[ $title =~ :[[:space:]]*(~|~?/[A-Za-z0-9._/~-]*)$ ]]; then
       folder=${BASH_REMATCH[1]}
     fi

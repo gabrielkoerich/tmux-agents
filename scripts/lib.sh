@@ -38,7 +38,8 @@ plain() {
 
 # Agents prefix their title with a state glyph, ✳ idle or ◐ working, which is noise in a name
 clean_title() {
-  local t=${1//[[:cntrl:]]/}
+  local t
+  t=$(plain "$1")
   while [[ $t =~ ^[^[:alnum:][:space:]]+[[:space:]]+(.*)$ ]]; do
     t=${BASH_REMATCH[1]}
   done
