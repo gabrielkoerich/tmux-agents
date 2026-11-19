@@ -51,6 +51,29 @@ set -g set-titles on
 set -g set-titles-string '#{pane_title}'
 ```
 
+### SSH settings
+
+Two settings in `~/.ssh/config` make remote spaces work well. Put them in a `Host *` block:
+
+```
+Host *
+  ServerAliveInterval 15
+  ServerAliveCountMax 3
+  ControlMaster auto
+  ControlPath ~/.ssh/cm/%C
+  ControlPersist 10m
+```
+
+Then create the socket folder once with `mkdir -p ~/.ssh/cm && chmod 700 ~/.ssh/cm`.
+
+| Setting | Effect |
+|---|---|
+| `ServerAliveInterval 15`, `ServerAliveCountMax 3` | ssh sends a keepalive every 15 seconds and gives up after 3 missed ones, so a dead link ends in about 45 seconds and `connect` reconnects instead of the pane hanging |
+| `ControlMaster auto`, `ControlPath` | The first connection to a server opens a socket in `~/.ssh/cm`, and later ones run over it without a new login. A new space or split on that server opens in a fraction of a second, and an agent that asks for a key, like 1Password, asks once |
+| `ControlPersist 10m` | The shared connection stays open 10 minutes after its last window closes |
+
+ssh takes the first value it finds for each option, so a `Host *` block above your host blocks would win over a value one of them sets. None of these options is usually set per host, so any `Host *` block works. The cost of sharing: when the shared connection dies, every window on that server drops at once, and each one reconnects through `connect`.
+
 A headless agent, such as `claude -p` run by an orchestrator, draws no screen and sets no title. If it runs in its own tmux session, list those sessions in `@agents-headless-sessions` and the watcher marks them working while the session exists. They leave the spaces of this computer, and the sidebar names each after its worktree folder, so `~/.orch/worktrees/orch/internal-42-fix-login` shows as `orch · fix-login`:
 
 ```tmux
