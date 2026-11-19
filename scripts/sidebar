@@ -70,6 +70,9 @@ detached_rows() {
     label=$(clean_title "$title")
     if ! agent_title "$(plain "$title")"; then
       label=${path##*/}
+      if [[ $path =~ ^(/home/[^/]+|/Users/[^/]+|/root)/?$ ]]; then
+        label='~'
+      fi
     fi
 
     meta=detached
@@ -122,7 +125,7 @@ agent_row() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t open rs
+  local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t open rs all_remote
   rows=() targets=()
   load_palette
   now=$(date +%s)
@@ -189,6 +192,8 @@ build() {
     fi
   done <<<"$panes"
 
+  # Every pane's session counts as open here, splits included, before the list keeps one space per window
+  all_remote=$remote
   # Pinned machines first in their order, then any other host with an open connection
   remote=$(printf '%s' "$remote" | awk -F "$sep" '$1 != "" && !seen[$1 FS $2]++')
   hosts=$( { tr ' ' '\n' <<<"$(tmux show -gqv @agents-hosts)"; cut -d "$sep" -f1 <<<"$remote" | sort; } | awk 'NF && !seen[$0]++')
@@ -198,12 +203,11 @@ build() {
     fi
 
     add_row ""
-    open=' '
+    open=" $(awk -F "$sep" -v h="$n" '$1 == h { printf "%s ", $6 }' <<<"$all_remote")"
     if grep -q "^$n$sep" <<<"$remote"; then
       machine_row "$n" "host:$n" 1
       while IFS=$sep read -r host win id m sess rs; do
         space_row "$m" "$sess" "pane:$id@$host"
-        open+="$rs "
       done < <(awk -F "$sep" -v h="$n" '$1 == h' <<<"$remote")
     else
       machine_row "$n" "host:$n" 0

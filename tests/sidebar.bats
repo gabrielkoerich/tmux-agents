@@ -97,3 +97,15 @@ teardown() {
   [[ $output == *"attach:box:s-old|"*"orch"*"detached"* ]]
   [[ $output == *"attach:box:badrm-rf|"*"elsewhere"* ]]
 }
+
+@test "a session open in a split counts as open, not detached" {
+  printf '#!/bin/sh\nprintf "%%s\\n" "s-one|1|/home/u|x" "s-two|1|/home/u|x"\n' > "$BATS_TEST_TMPDIR/bin/ssh"
+  chmod +x "$BATS_TEST_TMPDIR/bin/ssh"
+  tmux set -g @agents-hosts box
+  a=$(tmux new-window -d -P -F '#{pane_id}' -t main)
+  b=$(tmux split-window -d -P -F '#{pane_id}' -t "$a")
+  tmux set -p -t "$a" @remote_session s-one \; set -p -t "$a" @ssh_host box \; set -p -t "$b" @remote_session s-two \; set -p -t "$b" @ssh_host box
+  "$BATS_TEST_DIRNAME/../scripts/agents" poll-sessions
+  TMUX_PANE=$pane run "$bin" build
+  [[ $output != *"attach:box:"* ]]
+}
