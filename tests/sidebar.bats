@@ -84,3 +84,16 @@ teardown() {
   "$BATS_TEST_DIRNAME/../scripts/tree" "$pane"
   [ "$(tmux list-panes -t main | wc -l | tr -d ' ')" -eq 1 ]
 }
+
+@test "a pinned machine lists its sessions this Mac has no window on, to reattach" {
+  printf '#!/bin/sh\nprintf "%%s\\n" "s-open|1|/home/u|u@box: ~" "s-old|0|/home/u/code/orch|u@box: ~/code/orch" "bad;rm -rf ~|2|/tmp|x"\n' > "$BATS_TEST_TMPDIR/bin/ssh"
+  chmod +x "$BATS_TEST_TMPDIR/bin/ssh"
+  tmux set -g @agents-hosts box
+  other=$(tmux new-window -d -P -F '#{pane_id}' -t main)
+  tmux set -p -t "$other" @remote_session s-open \; set -p -t "$other" @ssh_host box
+  "$BATS_TEST_DIRNAME/../scripts/agents" poll-sessions
+  TMUX_PANE=$pane run "$bin" build
+  [[ $output != *"attach:box:s-open|"* ]]
+  [[ $output == *"attach:box:s-old|"*"orch"*"detached"* ]]
+  [[ $output == *"attach:box:badrm-rf|"*"elsewhere"* ]]
+}

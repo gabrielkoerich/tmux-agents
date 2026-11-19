@@ -270,6 +270,30 @@ poll_services() {
   done
 }
 
+# Lists the tmux sessions on every pinned machine in @agents_remote_<host>, a line each: name, clients
+# attached, the active pane's folder and title. All of it comes from the server, so it is kept as plain text
+poll_sessions() {
+  local host hosts key raw line name att path title out
+  read -r -a hosts <<<"$(option @agents-hosts '')"
+  for host in ${hosts[@]+"${hosts[@]}"}; do
+    raw=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" "tmux ls -F '#{session_name}|#{session_attached}|#{pane_current_path}|#{pane_title}' 2>/dev/null")
+    # 255 is ssh failing to reach the host, so keep what is known; any other code is a server with no sessions
+    if [[ $? -eq 255 ]]; then
+      continue
+    fi
+
+    out=''
+    while IFS='|' read -r name att path title; do
+      name=$(plain "$name" | tr -cd 'A-Za-z0-9_.-')
+      if [[ -n $name ]]; then
+        out+="$name$sep$(plain "$att")$sep$(plain "$path")$sep$(plain "$title")"$'\n'
+      fi
+    done <<<"$raw"
+    key=$(printf '%s' "$host" | tr -c 'A-Za-z0-9_' '_')
+    tmux set -g "@agents_remote_$key" "$out"
+  done
+}
+
 watch() {
   local pid poller='' last=0
   pid=$(tmux show -gqv @agent_watch_pid)
@@ -284,7 +308,7 @@ watch() {
     scan
     # Services are polled over ssh in the background, so a slow server never holds up the panes
     if (( $(date +%s) - last >= $(option @agents-services-interval 30) )) && ! { [[ -n $poller ]] && kill -0 "$poller" 2>/dev/null; }; then
-      poll_services &
+      { poll_services; poll_sessions; } &
       poller=$!
       last=$(date +%s)
     fi
@@ -384,6 +408,7 @@ case ${1:-} in
   pick) pick "${2:-}" ;;
   classify) classify ;;
   hosts) ssh_hosts "$ssh_config" ;;
+  poll-sessions) poll_sessions ;;
   hermes-state) hermes_state "${2:?usage: tmux-agents hermes-state <host>}" ;;
   *) echo "usage: tmux-agents watch|stop|pick <client>|classify|hosts|hermes-state <host>" >&2; exit 2 ;;
 esac

@@ -44,6 +44,8 @@ bind | run-shell "~/.tmux/plugins/tmux-agents/scripts/split h '#{pane_id}'"
 bind _ run-shell "~/.tmux/plugins/tmux-agents/scripts/split v '#{pane_id}'"
 ``` The sidebar names the space after the remote folder or the agent's task, and after the session when the title has neither.
 
+A session outlives its window too. Close the window, or restart the Mac, and the agent keeps running on the server. The watcher lists the tmux sessions on every machine in `@agents-hosts` each time it polls, and the sidebar shows the ones this Mac has no window on under their machine, as `↺ <folder> detached`, or `elsewhere` when another terminal has it. A click reattaches it in a new window with `connect <host> <session>`. Session names keep only `A-Za-z0-9_.-`, and folders and titles reach the screen as plain text.
+
 The server needs tmux. Without it `connect` falls back to a plain shell, which a drop ends. For the agent's title to reach your tmux, set this in the server's tmux config:
 
 ```tmux
@@ -209,7 +211,7 @@ The picker takes its fzf colours from `@agents-fzf-colors`, so a theme can set t
 | `@agents-interval` | `2` | Seconds between scans |
 | `@agents-idle-after` | `600` | Seconds a finished turn waits before it counts as idle |
 | `@agents-services` | | `host:service` entries the watcher polls over ssh, `hermes` for now |
-| `@agents-services-interval` | `30` | Seconds between service polls |
+| `@agents-services-interval` | `30` | Seconds between polls of services and of the sessions on pinned machines |
 | `@agents-popup-style` | `bg=#101010` | Picker background |
 | `@agents-popup-border-style` | `fg=colour238,bg=#101010` | Picker border |
 | `@agents-fzf-colors` | dark, orange accent | fzf `--color` value for the picker |

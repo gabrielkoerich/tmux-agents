@@ -58,6 +58,30 @@ machine_row() {
   add_row " ${c_head}▭ $name$(spaces $(( width - 5 - ${#name} )))$dot${c_fg} " "$target"
 }
 
+# The server's tmux sessions this Mac has no window on, such as one whose window was closed, to reattach
+detached_rows() {
+  local host=$1 open=$2 key name att path title label meta
+  key=$(printf '%s' "$host" | tr -c 'A-Za-z0-9_' '_')
+  while IFS=$sep read -r name att path title; do
+    if [[ -z $name || $open == *" $name "* ]]; then
+      continue
+    fi
+
+    label=$(clean_title "$title")
+    if ! agent_title "$(plain "$title")"; then
+      label=${path##*/}
+    fi
+
+    meta=detached
+    if [[ $att =~ ^[1-9] ]]; then
+      meta=elsewhere
+    fi
+
+    label=$(fit "${label:-$name}" $(( width - 7 - ${#meta} - 1 )))
+    add_row "   ${c_meta}↺  ${c_name}$label$(spaces $(( width - 7 - ${#meta} - 1 - ${#label} ))) ${c_meta}$meta${c_fg} " "attach:$host:$name"
+  done <<<"$(tmux show -gqv "@agents_remote_$key")"
+}
+
 new_row() {
   add_row "   ${c_meta}+  new${c_fg}" "host:$1"
 }
@@ -98,7 +122,7 @@ agent_row() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t
+  local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t open rs
   rows=() targets=()
   load_palette
   now=$(date +%s)
@@ -155,7 +179,7 @@ build() {
         m=${suser:+$host@$suser}
         m=${m:-${rsess:-shell}}
       fi
-      remote+="$host$sep$win$sep$id$sep${m:-shell}$sep$sess:$idx"$'\n'
+      remote+="$host$sep$win$sep$id$sep${m:-shell}$sep$sess:$idx$sep$rsess"$'\n'
     fi
 
     if [[ -n $state ]]; then
@@ -174,14 +198,17 @@ build() {
     fi
 
     add_row ""
+    open=' '
     if grep -q "^$n$sep" <<<"$remote"; then
       machine_row "$n" "host:$n" 1
-      while IFS=$sep read -r host win id m sess; do
+      while IFS=$sep read -r host win id m sess rs; do
         space_row "$m" "$sess" "pane:$id@$host"
+        open+="$rs "
       done < <(awk -F "$sep" -v h="$n" '$1 == h' <<<"$remote")
     else
       machine_row "$n" "host:$n" 0
     fi
+    detached_rows "$n" "$open"
     new_row "$n"
   done <<<"$hosts"
 
@@ -258,11 +285,11 @@ step() {
   done
 }
 
-# Opens a window in the session you are in, attached to a new tmux session on the host that connect names
+# Opens a window in the session you are in, attached to a tmux session on the host, a new one unless named
 new_space() {
   local connect
   connect="$(cd "$(dirname "$0")" && pwd)/connect"
-  tmux new-window -t "$(tmux display -p -c "$1" '#{session_name}'):" "$connect" "$2"
+  tmux new-window -t "$(tmux display -p -c "$1" '#{session_name}'):" "$connect" "$2" ${3:+"$3"}
 }
 
 activate() {
@@ -282,6 +309,7 @@ activate() {
     (session:) tmux switch-client -c "$client" -t "=$name" ;;
     (pane:) tmux switch-client -c "$client" -t "$name" \; select-window -t "$name" \; select-pane -t "$name" ;;
     (host:*) new_space "$client" "$name" ;;
+    (attach:*) new_space "$client" "${name%%:*}" "${name#*:}" ;;
     (session:1) tmux new-window -t "=$name:" ;;
     (pane:1)
       if [[ -n $host ]]; then
