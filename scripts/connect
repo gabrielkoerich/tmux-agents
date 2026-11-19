@@ -7,8 +7,11 @@ name=$(printf '%s' "${2:-}" | tr -c 'A-Za-z0-9_-' '-' | sed 's/^-*//; s/-*$//')
 # Down to the second, so two new spaces never share a session
 name=${name:-$(date +%m%d-%H%M%S)}
 
+source "$(dirname "$0")/lib.sh"
+
+# tmux reports this pane as bash, not ssh, so name the host and the session for the watcher and the sidebar
 if [[ -n ${TMUX_PANE:-} ]]; then
-  tmux set -p -t "$TMUX_PANE" @remote_session "$name"
+  tmux set -p -t "$TMUX_PANE" @remote_session "$name" \; set -p -t "$TMUX_PANE" @ssh_host "${host#*@}" \; set -p -t "$TMUX_PANE" @ssh_user "$(ssh_user_of "$host")"
 fi
 
 delay=2

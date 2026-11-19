@@ -127,8 +127,8 @@ notify() {
 }
 
 scan() {
-  local panes id win cmd prev cur visible place pss pid host since found title state alert headless idle_after now ps_out=
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{window_id}$sep#{pane_current_command}$sep#{@agent_state}$sep#{@agent_alert}$sep#{&&:#{window_active},#{session_attached}}$sep#{session_name}:#{window_index}$sep#{pane_program_status_states}$sep#{pane_pid}$sep#{@ssh_host}$sep#{@agent_since}$sep#{pane_title}") || exit 0
+  local panes id win cmd prev cur visible place pss pid host rsess remote since found title state alert headless idle_after now ps_out=
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{window_id}$sep#{pane_current_command}$sep#{@agent_state}$sep#{@agent_alert}$sep#{&&:#{window_active},#{session_attached}}$sep#{session_name}:#{window_index}$sep#{pane_program_status_states}$sep#{pane_pid}$sep#{@ssh_host}$sep#{@remote_session}$sep#{@agent_since}$sep#{pane_title}") || exit 0
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
@@ -136,14 +136,23 @@ scan() {
   headless=$(option @agents-headless-sessions '')
   idle_after=$(option @agents-idle-after 600)
   now=$(date +%s)
-  while IFS=$sep read -r id win cmd prev cur visible place pss pid host since title; do
+  while IFS=$sep read -r id win cmd prev cur visible place pss pid host rsess since title; do
+    # A pane connect opened runs ssh under a bash loop, so tmux reports bash, and connect sets the host itself
+    remote=
+    if [[ $cmd =~ $ssh_cmds || -n $rsess ]]; then
+      remote=1
+    fi
+
     # tmux only sees the local ssh process, so keep its host for window names and the sidebar
-    if [[ $cmd =~ $ssh_cmds ]]; then
+    if [[ $cmd =~ $ssh_cmds ]] || [[ -n $rsess && -z $host ]]; then
+      if [[ -z $ps_out ]]; then
+        ps_out=$(ps -A -o pid=,ppid=,args=)
+      fi
       found=$(ssh_host_of "$pid" "$ps_out")
       if [[ -n $found && $found != "$host" ]]; then
-        tmux set -p -t "$id" @ssh_host "$found"
+        tmux set -p -t "$id" @ssh_host "$found" \; set -p -t "$id" @ssh_user "$(ssh_user_of "$found")"
       fi
-    elif [[ -n $host ]]; then
+    elif [[ -n $host && -z $rsess ]]; then
       tmux set -pu -t "$id" @ssh_host
     fi
 
@@ -152,12 +161,12 @@ scan() {
     if [[ -n $headless ]] && headless_session "${place%:*}" "$headless"; then
       state=working
     # OSC 7501 states need a tmux that keeps them, stock tmux leaves the field empty and the screen decides
-    elif [[ -n $pss && ( $cmd =~ $agent_cmds || $cmd =~ $ssh_cmds ) ]]; then
+    elif [[ -n $pss && ( $cmd =~ $agent_cmds || -n $remote ) ]]; then
       state=$(program_status "$pss")
-    elif [[ $cmd =~ $agent_cmds || $cmd =~ $ssh_cmds || $title == *✳* ]]; then
+    elif [[ $cmd =~ $agent_cmds || -n $remote ]] || agent_title "$title"; then
       state=$(tmux capture-pane -p -t "$id" | classify)
-      # The title keeps ✳ after Claude exits, so only trust it behind ssh where the command hides the agent
-      if [[ -z $state ]] && { [[ $cmd =~ $agent_cmds ]] || [[ $cmd =~ $ssh_cmds && ( $title == *✳* || -n $prev ) ]]; }; then
+      # The title keeps its glyph after Claude exits, so only trust it behind ssh where the command hides the agent
+      if [[ -z $state ]] && { [[ $cmd =~ $agent_cmds ]] || { [[ -n $remote ]] && { agent_title "$title" || [[ -n $prev ]]; }; }; }; then
         state=idle
       fi
     fi
@@ -237,8 +246,8 @@ pick() {
   dim=$c_meta
   out=$(
     {
-      tmux list-panes -a -F "#{@agent_state}$sep#{pane_id}$sep#{pane_title}$sep#{session_name}:#{window_index}$sep#{pane_current_command}$sep#{pane_current_path}" |
-        while IFS=$sep read -r state id title place cmd path; do
+      tmux list-panes -a -F "#{@agent_state}$sep#{pane_id}$sep#{pane_title}$sep#{session_name}:#{window_index}$sep#{pane_current_command}$sep#{@ssh_host}$sep#{pane_current_path}" |
+        while IFS=$sep read -r state id title place cmd shost path; do
           case $state in
             (blocked) icon="${c_blocked}!" ;;
             (asking) icon="${c_asking}?" ;;
@@ -248,7 +257,8 @@ pick() {
             (*) continue ;;
           esac
 
-          if [[ $cmd =~ $ssh_cmds ]]; then
+          if [[ -n $shost ]]; then
+            cmd=$shost
             path=ssh
           fi
           printf '%s%s%s%s %sagent%s    %-44s %s%s · %s%s\n' "$(rank "$state")" "$sep" "pane:$id$sep" "$icon" "$dim" "$off" "$cmd › $(clean_title "$title")" "$dim" "${path##*/}" "$place" "$off"

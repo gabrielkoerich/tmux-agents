@@ -86,3 +86,18 @@ load_palette() {
   c_badge_fg=$(colour 38 "$dim" 255)
   read -r -a badge_list <<<"$badges"
 }
+
+# True when a title starts with an agent's state glyph and a space, like "✳ Fix login" or "◐ Fix login"
+agent_title() {
+  [[ $1 =~ ^[^[:alnum:][:space:]]+[[:space:]] ]]
+}
+
+# The user ssh logs in as, from the target or the ssh config, resolved locally without connecting
+ssh_user_of() {
+  if [[ $1 == *@* ]]; then
+    echo "${1%%@*}"
+    return
+  fi
+
+  ssh -G "$1" 2>/dev/null | awk '$1 == "user" { print $2; exit }'
+}
