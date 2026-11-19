@@ -273,15 +273,28 @@ poll_services() {
 # Lists the tmux sessions on every pinned machine in @agents_remote_<host>, a line each: name, clients
 # attached, the active pane's folder and title. All of it comes from the server, so it is kept as plain text
 poll_sessions() {
-  local host hosts key raw line name att path title out
+  local host hosts key raw line name att path title out stats probe
+  probe="$(cd "$(dirname "$0")" && pwd)/host-probe.sh"
   read -r -a hosts <<<"$(option @agents-hosts '')"
   for host in ${hosts[@]+"${hosts[@]}"}; do
-    raw=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" "tmux ls -F '#{session_name}|#{session_attached}|#{pane_current_path}|#{pane_title}' 2>/dev/null")
-    # 255 is ssh failing to reach the host, so keep what is known; any other code is a server with no sessions
+    key=$(printf '%s' "$host" | tr -c 'A-Za-z0-9_' '_')
+    # One round trip a host: the probe goes on stdin to the server's sh and prints its sessions and its stats
+    raw=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" 'sh -s' <"$probe" 2>/dev/null)
+    # 255 is ssh failing to reach the host, so keep the sessions known and drop the stats, which would be stale
     if [[ $? -eq 255 ]]; then
+      tmux set -gu "@agents_stats_$key"
       continue
     fi
 
+    # The stats come from the server too, so they are stored only when they are three numbers
+    stats=$(sed -n '/^--stats--$/{n;p;}' <<<"$raw")
+    if [[ $stats =~ ^[0-9]{1,3}\|[0-9]+(\.[0-9]+)?\|[0-9]+(\.[0-9]+)?$ ]]; then
+      tmux set -g "@agents_stats_$key" "$stats"
+    else
+      tmux set -gu "@agents_stats_$key"
+    fi
+
+    raw=$(sed '/^--stats--$/,$d' <<<"$raw")
     out=''
     while IFS='|' read -r name att path title; do
       name=$(plain "$name" | tr -cd 'A-Za-z0-9_.-')
@@ -289,7 +302,6 @@ poll_sessions() {
         out+="$name$sep$(plain "$att")$sep$(plain "$path")$sep$(plain "$title")"$'\n'
       fi
     done <<<"$raw"
-    key=$(printf '%s' "$host" | tr -c 'A-Za-z0-9_' '_')
     tmux set -g "@agents_remote_$key" "$out"
   done
 }

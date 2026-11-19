@@ -47,15 +47,24 @@ add_row() {
   targets+=("${2:-}")
 }
 
-# A green dot while a connection is open, a grey ring for a pinned machine with none
+# A green dot while a connection is open, a grey ring for a pinned machine with none, and the stats the
+# watcher last read from it: cpu, memory in use and load
 machine_row() {
-  local name target=$2 dot=${c_on}●
+  local name target=$2 dot=${c_on}● stats='' cpu mem load key
   if [[ ${3:-1} != 1 ]]; then
     dot=${c_meta}○
   fi
 
-  name=$(fit "$1" $(( width - 5 )))
-  add_row " ${c_head}▭ $name$(spaces $(( width - 5 - ${#name} )))$dot${c_fg} " "$target"
+  if [[ -n $target ]]; then
+    key=$(printf '%s' "${target#host:}" | tr -c 'A-Za-z0-9_' '_')
+    IFS='|' read -r cpu mem load <<<"$(tmux show -gqv "@agents_stats_$key")"
+    if [[ -n ${cpu:-} ]]; then
+      stats="$cpu% ${mem}G $load "
+    fi
+  fi
+
+  name=$(fit "$1" $(( width - 5 - ${#stats} )))
+  add_row " ${c_head}▭ $name$(spaces $(( width - 5 - ${#stats} - ${#name} )))${c_meta}$stats$dot${c_fg} " "$target"
 }
 
 # The server's tmux sessions this Mac has no window on, such as one whose window was closed, to reattach
