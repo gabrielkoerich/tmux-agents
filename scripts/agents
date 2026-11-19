@@ -89,15 +89,39 @@ program_status() {
   esac
 }
 
+# The title of a notification: the agent or the server it runs on, and its project folder, like "claude · homelab".
+# Over ssh the folder is the one the server's title shows, the local one is just where ssh started
+who_where() {
+  local cmd=$1 host=$2 path=$3 title who folder=''
+  title=$(plain "$4")
+  who=${host:-$cmd}
+  if [[ -n $host ]]; then
+    if [[ $title =~ :[[:space:]]*(~|~?/[A-Za-z0-9._/~-]*)$ ]]; then
+      folder=${BASH_REMATCH[1]##*/}
+    fi
+  else
+    folder=${path##*/}
+  fi
+  printf '%s%s' "$who" "${folder:+ · $folder}"
+}
+
+# An agent's task, from a title with its state glyph, like "✳ Fix login", and nothing for any other title
+task_of() {
+  if agent_title "$(plain "$1")"; then
+    clean_title "$1"
+  fi
+}
+
 osascript_notify() {
   osascript -e 'on run argv' \
-    -e 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"' \
-    -e 'end run' "$1" "$2" >/dev/null 2>&1
+    -e 'display notification (item 2 of argv) with title (item 1 of argv) subtitle (item 3 of argv) sound name "Glass"' \
+    -e 'end run' "$1" "$2" "${3:-}" >/dev/null 2>&1
 }
 
 # Clicking a terminal-notifier notification jumps the most recent terminal to the pane, osascript can only show it
+# notify <title> <message> [pane] [subtitle]: a click jumps to the pane when there is one
 notify() {
-  local tmux_bin jump
+  local tmux_bin jump sub=${4:-}
   if [[ $(option @agents-notify on) != on ]]; then
     return
   fi
@@ -113,21 +137,20 @@ notify() {
     fi
 
     {
-      terminal-notifier -title "$1" -message "$2" -sound Glass -group "tmux-agents-${3:-$1}" "${click[@]}" >/dev/null 2>&1 ||
-        osascript_notify "$1" "$2"
+      terminal-notifier -title "$1" -subtitle "$sub" -message "$2" -sound Glass -group "tmux-agents-${3:-$1}" "${click[@]}" >/dev/null 2>&1 ||
+        osascript_notify "$1" "$2" "$sub"
     } &
   elif command -v osascript >/dev/null; then
-    osascript -e 'on run argv' \
-      -e 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"' \
-      -e 'end run' "$1" "$2" >/dev/null 2>&1 &
+    osascript_notify "$1" "$2" "$sub" &
   elif command -v notify-send >/dev/null; then
-    notify-send "$1" "$2" &
+    notify-send "$1" "${sub:+$sub
+}$2" &
   fi
 }
 
 scan() {
-  local panes id win cmd prev cur visible place pss pid host rsess remote since found title state alert headless idle_after now ps_out=
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{window_id}$sep#{pane_current_command}$sep#{@agent_state}$sep#{@agent_alert}$sep#{&&:#{window_active},#{session_attached}}$sep#{session_name}:#{window_index}$sep#{pane_program_status_states}$sep#{pane_pid}$sep#{@ssh_host}$sep#{@remote_session}$sep#{@agent_since}$sep#{pane_title}") || exit 0
+  local panes id win cmd prev cur visible place pss pid host rsess remote since path found title state alert headless idle_after now ps_out=
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{window_id}$sep#{pane_current_command}$sep#{@agent_state}$sep#{@agent_alert}$sep#{&&:#{window_active},#{session_attached}}$sep#{session_name}:#{window_index}$sep#{pane_program_status_states}$sep#{pane_pid}$sep#{@ssh_host}$sep#{@remote_session}$sep#{@agent_since}$sep#{pane_current_path}$sep#{pane_title}") || exit 0
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
@@ -135,7 +158,7 @@ scan() {
   headless=$(option @agents-headless-sessions '')
   idle_after=$(option @agents-idle-after 600)
   now=$(date +%s)
-  while IFS=$sep read -r id win cmd prev cur visible place pss pid host rsess since title; do
+  while IFS=$sep read -r id win cmd prev cur visible place pss pid host rsess since path title; do
     # A pane connect opened runs ssh under a bash loop, so tmux reports bash, and connect sets the host itself
     remote=
     if [[ $cmd =~ $ssh_cmds || -n $rsess ]]; then
@@ -198,7 +221,7 @@ scan() {
 
       if [[ -n $alert && $visible != 1 ]]; then
         tmux set -w -t "$win" @agent_alert "$alert"
-        notify "$(clean_title "$title")" "$place $(case $alert in (blocked) echo 'needs you' ;; (asking) echo 'asks you' ;; (*) echo 'finished' ;; esac)" "$id"
+        notify "$(who_where "$cmd" "$host" "$path" "$title")" "$(case $alert in (blocked) echo 'needs you' ;; (asking) echo 'asks you' ;; (*) echo 'finished' ;; esac) · $place" "$id" "$(task_of "$title")"
       elif [[ $state == working && -n $cur ]]; then
         tmux set -wu -t "$win" @agent_alert
       fi
