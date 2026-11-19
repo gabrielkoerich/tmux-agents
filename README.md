@@ -37,7 +37,7 @@ ssh -t <host> "tmux new -A -s <name>"
 
 The agent lives in that tmux session on the server. When the link drops, `connect` says so and reconnects to the same session, waiting 2 seconds and doubling up to 30. A detach or the session ending stops it. `ServerAliveInterval=15` notices a dead link in about 45 seconds. It names the session after the date, time and pane, like `1119-021530-42`, unless you pass a name as `connect <host> <name>`.
 
-`scripts/split h|v <pane>` splits a pane, and in a pane on a server the new pane connects to that server too, in a new session that starts in the folder the title shows. Bind it in place of `split-window`:
+`scripts/split h|v <pane>` splits a pane, and in a pane on a server the new pane connects to that server too, in a new session that starts in the folder the title shows. `scripts/tree <pane>` docks a tree of that folder on the left, run on the server, and the same key closes it. Bind it for panes on a server, and leave the rest to tmux-sidebar. Bind `split` in place of `split-window`:
 
 ```tmux
 bind | run-shell "~/.tmux/plugins/tmux-agents/scripts/split h '#{pane_id}'"
@@ -158,6 +158,7 @@ The picker takes its fzf colours from `@agents-fzf-colors`, so a theme can set t
 | `@agents-pick-key` | `Space` | Picker key, after prefix |
 | `@agents-sidebar-key` | `a` | Sidebar key, after prefix |
 | `@agents-sidebar-width` | `32` | Sidebar width in cells |
+| `@agents-tree-width` | `40` | Width of the tree `scripts/tree` docks |
 | `@agents-hosts` | | Machines the sidebar always shows, in order |
 | `@agents-headless-sessions` | | Session globs that run a headless agent |
 | `@agents-notify` | `on` | Desktop notifications |

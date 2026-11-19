@@ -107,3 +107,44 @@ ssh_user_of() {
 
   ssh -G "$1" 2>/dev/null | awk '$1 == "user" { print $2; exit }'
 }
+
+# Prints user@host and the folder its title shows for a pane on a server, and fails for a local pane
+remote_of() {
+  local cmd host user rsess pid title folder=''
+  IFS=$sep read -r cmd host user rsess pid title <<<"$(tmux display -p -t "$1" "#{pane_current_command}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@remote_session}$sep#{pane_pid}$sep#{pane_title}")"
+  if [[ ! $cmd =~ $ssh_cmds && -z $rsess ]]; then
+    return 1
+  fi
+
+  if [[ -z $host ]]; then
+    host=$(ssh_host_of "$pid" "$(ps -A -o pid=,ppid=,args=)")
+  fi
+
+  if [[ -z $host ]]; then
+    return 1
+  fi
+
+  # The title comes from the server, so take only plain path characters from it
+  title=$(plain "$title")
+  if [[ $title =~ :[[:space:]]*(~|~?/[A-Za-z0-9._/~-]*)$ ]]; then
+    folder=${BASH_REMATCH[1]}
+  fi
+  printf '%s%s%s\n' "${user:+$user@}$host" "$sep" "$folder"
+}
+
+# The cd a server runs before a command, quoted for its shell, with ~ left for that shell to expand
+remote_cd() {
+  if [[ $1 == "~" ]]; then
+    printf 'cd ~ 2>/dev/null; '
+  elif [[ $1 == "~/"* ]]; then
+    printf 'cd ~/%q 2>/dev/null; ' "${1#\~/}"
+  elif [[ -n $1 ]]; then
+    printf 'cd %q 2>/dev/null; ' "$1"
+  fi
+}
+
+option() {
+  local v
+  v=$(tmux show -gqv "$1")
+  echo "${v:-$2}"
+}

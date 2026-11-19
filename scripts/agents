@@ -89,12 +89,6 @@ program_status() {
   esac
 }
 
-option() {
-  local v
-  v=$(tmux show -gqv "$1")
-  echo "${v:-$2}"
-}
-
 osascript_notify() {
   osascript -e 'on run argv' \
     -e 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"' \

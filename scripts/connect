@@ -16,15 +16,7 @@ if [[ -n ${TMUX_PANE:-} ]]; then
 fi
 
 # A folder from the pane it splits, so the new session starts where that one is
-dir=${3:-}
-remote="tmux new -A -s '$name'"
-if [[ $dir == "~" ]]; then
-  remote="cd ~ 2>/dev/null; $remote"
-elif [[ $dir == "~/"* ]]; then
-  remote="cd ~/$(printf %q "${dir#\~/}") 2>/dev/null; $remote"
-elif [[ -n $dir ]]; then
-  remote="cd $(printf %q "$dir") 2>/dev/null; $remote"
-fi
+remote="$(remote_cd "${3:-}")tmux new -A -s '$name'"
 
 delay=2
 while true; do

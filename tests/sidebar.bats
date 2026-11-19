@@ -74,3 +74,13 @@ teardown() {
   [ ! -e "$marker" ]
   [[ "$(tmux list-panes -t main -F '#{pane_start_command}' | tail -1)" == *"connect box '' ''" ]]
 }
+
+@test "tree opens a server pane's tree on the left and the same key closes it" {
+  printf '#!/bin/sh\nsleep 30\n' > "$BATS_TEST_TMPDIR/bin/ssh"
+  chmod +x "$BATS_TEST_TMPDIR/bin/ssh"
+  tmux set -p -t "$pane" @remote_session s1 \; set -p -t "$pane" @ssh_host box \; select-pane -t "$pane" -T "u@box: ~/code"
+  "$BATS_TEST_DIRNAME/../scripts/tree" "$pane"
+  [[ "$(tmux list-panes -t main -F '#{@agents_tree} #{pane_start_command}')" == *"1 ssh -t box 'cd ~/code"* ]]
+  "$BATS_TEST_DIRNAME/../scripts/tree" "$pane"
+  [ "$(tmux list-panes -t main | wc -l | tr -d ' ')" -eq 1 ]
+}

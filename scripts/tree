@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Toggles a tree of the folder a server pane is in, run on that server and docked left like tmux-sidebar
+set -u
+dir=$(cd "$(dirname "$0")" && pwd)
+source "$dir/lib.sh"
+
+pane=${1:?usage: tree <pane>}
+win=$(tmux display -p -t "$pane" '#{window_id}')
+open=$(tmux list-panes -t "$win" -F "#{pane_id} #{@agents_tree}" | awk '$2 == 1 { print $1; exit }')
+if [[ -n $open ]]; then
+  tmux kill-pane -t "$open"
+  exit 0
+fi
+
+if ! found=$(remote_of "$pane"); then
+  tmux display-message "tree: not a pane on a server"
+  exit 0
+fi
+
+IFS=$sep read -r target folder <<<"$found"
+remote="$(remote_cd "$folder")if command -v tree >/dev/null; then tree -C; else ls -la; fi | LESS= less --dumb --chop-long-lines --tilde --IGNORE-CASE --RAW-CONTROL-CHARS"
+new=$(tmux split-window -P -F '#{pane_id}' -hb -l "$(option @agents-tree-width 40)" -t "$pane" ssh -t "$target" "$remote")
+tmux set -p -t "$new" @agents_tree 1
