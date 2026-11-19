@@ -244,7 +244,7 @@ step() {
 new_space() {
   local connect
   connect="$(cd "$(dirname "$0")" && pwd)/connect"
-  tmux new-window -t "$(tmux display -p -c "$1" '#{session_name}'):" "'$connect' '$2'"
+  tmux new-window -t "$(tmux display -p -c "$1" '#{session_name}'):" "$connect" "$2"
 }
 
 activate() {

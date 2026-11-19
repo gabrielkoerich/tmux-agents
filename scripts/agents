@@ -284,9 +284,9 @@ pick() {
     ssh)
       connect="$(cd "$(dirname "$0")" && pwd)/connect"
       if [[ $key == ctrl-s ]]; then
-        tmux new-session -d -s "$name" "'$connect' '$name'" \; switch-client -c "$client" -t "$name"
+        tmux new-session -d -s "$name" "$connect" "$name" \; switch-client -c "$client" -t "$name"
       else
-        tmux new-window -t "$(tmux display -p -c "$client" '#{session_name}'):" "'$connect' '$name'"
+        tmux new-window -t "$(tmux display -p -c "$client" '#{session_name}'):" "$connect" "$name"
       fi
       ;;
   esac

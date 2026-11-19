@@ -19,10 +19,12 @@ if [[ $cmd =~ $ssh_cmds || -n $rsess ]]; then
 
   if [[ -n $host ]]; then
     folder=
-    if [[ $title =~ :[[:space:]]*(~|~?/[^[:space:]]*)$ ]]; then
+    # The title comes from the server, so take only plain path characters from it
+    if [[ $title =~ :[[:space:]]*(~|~?/[A-Za-z0-9._/~-]*)$ ]]; then
       folder=${BASH_REMATCH[1]}
     fi
-    tmux split-window "$flag" -t "$pane" "'$dir/connect' '${user:+$user@}$host' '' '$folder'"
+    # Separate arguments, so tmux runs connect directly and no shell reads a value
+    tmux split-window "$flag" -t "$pane" "$dir/connect" "${user:+$user@}$host" '' "$folder"
     exit 0
   fi
 fi

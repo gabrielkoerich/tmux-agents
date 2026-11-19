@@ -62,3 +62,15 @@ teardown() {
   [[ $output == *"Working"* ]]
   [[ $output == *"orch"*"fix-login"* ]]
 }
+
+@test "a split of a server pane never runs what the server put in its title" {
+  printf '#!/bin/sh\nsleep 30\n' > "$BATS_TEST_TMPDIR/bin/ssh"
+  chmod +x "$BATS_TEST_TMPDIR/bin/ssh"
+  marker="$BATS_TEST_TMPDIR/pwned"
+  tmux set -p -t "$pane" @remote_session s1 \; set -p -t "$pane" @ssh_host box \; select-pane -t "$pane" -T "u@box: /tmp';touch $marker;'"
+  run "$BATS_TEST_DIRNAME/../scripts/split" h "$pane"
+  [ "$status" -eq 0 ]
+  sleep 1
+  [ ! -e "$marker" ]
+  [[ "$(tmux list-panes -t main -F '#{pane_start_command}' | tail -1)" == *"connect box '' ''" ]]
+}
