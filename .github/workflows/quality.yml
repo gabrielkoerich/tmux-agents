@@ -13,10 +13,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install shellcheck + ripgrep
+      # The audit falls back to grep without ripgrep, and apt retries a slow mirror
+      - name: Install shellcheck
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck ripgrep
+          sudo apt-get install -y -o Acquire::Retries=5 shellcheck
 
       - name: Bash syntax check
         run: |
@@ -35,10 +36,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install shellcheck + ripgrep + semgrep
+      - name: Install shellcheck + semgrep
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck ripgrep
+          sudo apt-get install -y -o Acquire::Retries=5 shellcheck
           python3 -m pip install --upgrade pip
           python3 -m pip install semgrep
 
@@ -63,7 +64,7 @@ jobs:
       - name: Install bats + tmux
         run: |
           sudo apt-get update
-          sudo apt-get install -y bats tmux
+          sudo apt-get install -y -o Acquire::Retries=5 bats tmux
 
       - name: Run tests
         run: bats tests
