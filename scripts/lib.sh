@@ -50,7 +50,7 @@ clean_title() {
 headless_session() {
   local p pats
   read -r -a pats <<<"$2"
-  for p in "${pats[@]}"; do
+  for p in ${pats[@]+"${pats[@]}"}; do
     if [[ $1 == $p ]]; then
       return 0
     fi

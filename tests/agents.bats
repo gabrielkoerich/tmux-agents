@@ -43,3 +43,38 @@ setup() {
   [ "$(plain "$(printf 'fix\033]52;c;ZXZpbA==\007 login\033[2J')")" = "fix]52;c;ZXZpbA== login[2J" ]
   [ "$(clean_title "$(printf '\033[31m✳ task\a')")" = "[31m✳ task" ]
 }
+
+# A fake ssh that answers with the hermes state file in $HERMES_JSON, or fails when it is unset
+hermes() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/sh\n[ -n "$HERMES_JSON" ] || exit 255\nprintf "%%s" "$HERMES_JSON"\n' > "$BATS_TEST_TMPDIR/bin/ssh"
+  chmod +x "$BATS_TEST_TMPDIR/bin/ssh"
+  HERMES_JSON=$1 PATH="$BATS_TEST_TMPDIR/bin:$PATH" run "$bin" hermes-state box
+}
+
+@test "hermes with nothing to do is idle" {
+  hermes '{"gateway_state":"running","active_agents":0,"active_work":null,"platforms":{"telegram":{"needs_attention":false}}}'
+  [ "$output" = idle ]
+}
+
+@test "hermes running agents is working, with what it works on" {
+  hermes '{"gateway_state":"running","active_agents":2,"active_work":"reply to a message","platforms":{}}'
+  [ "$output" = "$(printf 'working\nreply to a message')" ]
+}
+
+@test "a hermes platform that needs attention, or a stopped gateway, blocks" {
+  hermes '{"gateway_state":"running","active_agents":0,"platforms":{"telegram":{"needs_attention":true}}}'
+  [ "$output" = "$(printf 'blocked\ntelegram needs attention')" ]
+  hermes '{"gateway_state":"stopped","active_agents":0,"platforms":{}}'
+  [ "$output" = "$(printf 'blocked\ngateway stopped')" ]
+}
+
+@test "an unreachable hermes is idle and says so" {
+  hermes ''
+  [ "$output" = "$(printf 'idle\nunreachable')" ]
+}
+
+@test "hermes state from the server reaches the screen as plain text" {
+  hermes "{\"gateway_state\":\"running\",\"active_agents\":1,\"active_work\":\"job\\u001b]52;c;ZXZpbA==\\u0007 done\",\"platforms\":{}}"
+  [ "$output" = "$(printf 'working\njob]52;c;ZXZpbA== done')" ]
+}

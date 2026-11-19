@@ -58,14 +58,14 @@ ssh_hosts() {
     read -r -a words <<<"$rest"
     case $kw in
       [Hh][Oo][Ss][Tt])
-        for w in "${words[@]}"; do
+        for w in ${words[@]+"${words[@]}"}; do
           if [[ $w != *[*?!]* ]]; then
             echo "$w"
           fi
         done
         ;;
       [Ii][Nn][Cc][Ll][Uu][Dd][Ee])
-        for w in "${words[@]}"; do
+        for w in ${words[@]+"${words[@]}"}; do
           w=${w/#\~/$HOME}
           if [[ $w != /* ]]; then
             w=$HOME/.ssh/$w
@@ -106,9 +106,14 @@ notify() {
   if command -v terminal-notifier >/dev/null; then
     tmux_bin=$(command -v tmux)
     jump="c=\$($tmux_bin list-clients -F '#{client_activity} #{client_name}' | sort -rn | head -1 | cut -d' ' -f2); $tmux_bin switch-client -c \"\$c\" -t '$3' \\; select-window -t '$3' \\; select-pane -t '$3'"
+    # A service has no pane to jump to, so its notification only brings the terminal forward
+    local click=(-activate "$(option @agents-notify-app com.mitchellh.ghostty)")
+    if [[ -n ${3:-} ]]; then
+      click+=(-execute "$jump")
+    fi
+
     {
-      terminal-notifier -title "$1" -message "$2" -sound Glass -group "tmux-agents-$3" \
-        -execute "$jump" -activate "$(option @agents-notify-app com.mitchellh.ghostty)" >/dev/null 2>&1 ||
+      terminal-notifier -title "$1" -message "$2" -sound Glass -group "tmux-agents-${3:-$1}" "${click[@]}" >/dev/null 2>&1 ||
         osascript_notify "$1" "$2"
     } &
   elif command -v osascript >/dev/null; then
@@ -205,8 +210,68 @@ scan() {
   done <<<"$panes"
 }
 
+# Reads a hermes gateway's state file and prints the state and a detail, on two lines. The file comes
+# from the server, so jq takes only four fields from it and plain keeps only their text
+hermes_state() {
+  local raw gateway active work attention
+  if ! raw=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$1" 'cat ~/.hermes/gateway_state.json' 2>/dev/null); then
+    printf 'idle\nunreachable\n'
+    return
+  fi
+
+  {
+    IFS= read -r gateway
+    IFS= read -r active
+    IFS= read -r work
+    IFS= read -r attention
+  } < <(jq -r '(.gateway_state // "" | tostring), (.active_agents // 0 | tostring), (.active_work // "" | tostring),
+      ([(.platforms // {}) | to_entries[] | select(.value.needs_attention == true) | .key] | join(","))' <<<"$raw" 2>/dev/null)
+  gateway=$(plain "${gateway:-}")
+  active=$(plain "${active:-0}")
+  work=$(plain "${work:-}")
+  attention=$(plain "${attention:-}")
+
+  if [[ $gateway != running ]]; then
+    printf 'blocked\ngateway %s\n' "${gateway:-unknown}"
+  elif [[ -n $attention ]]; then
+    printf 'blocked\n%s needs attention\n' "$attention"
+  elif [[ $active =~ ^[0-9]+$ ]] && (( active > 0 )); then
+    printf 'working\n%s\n' "${work:-$active agents}"
+  else
+    printf 'idle\n\n'
+  fi
+}
+
+# Polls every host:service in @agents-services and keeps each one's state in @agents_svc_<host>_<service>
+poll_services() {
+  local entry entries host name key state detail prev since now
+  read -r -a entries <<<"$(option @agents-services '')"
+  # bash 3.2 calls an empty array unbound under set -u, so expand it only when it has items
+  for entry in ${entries[@]+"${entries[@]}"}; do
+    host=${entry%%:*}
+    name=${entry#*:}
+    case $name in
+      (hermes) { IFS= read -r state; IFS= read -r detail; } < <(hermes_state "$host") ;;
+      (*) continue ;;
+    esac
+
+    key=$(printf '%s_%s' "$host" "$name" | tr -c 'A-Za-z0-9_' '_')
+    IFS=$sep read -r prev since _ <<<"$(tmux show -gqv "@agents_svc_$key")"
+    now=$(date +%s)
+    if [[ $state != "${prev:-}" ]]; then
+      since=$now
+      if [[ -n ${prev:-} && $state == blocked ]]; then
+        notify "$host · $name" "$detail" ""
+      elif [[ ${prev:-} == working && $state == idle && $detail != unreachable ]]; then
+        notify "$host · $name" "finished" ""
+      fi
+    fi
+    tmux set -g "@agents_svc_$key" "$state$sep${since:-$now}$sep$detail"
+  done
+}
+
 watch() {
-  local pid
+  local pid poller='' last=0
   pid=$(tmux show -gqv @agent_watch_pid)
   if [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null; then
     exit 0
@@ -217,6 +282,12 @@ watch() {
   trap 'exit 0' TERM
   while true; do
     scan
+    # Services are polled over ssh in the background, so a slow server never holds up the panes
+    if (( $(date +%s) - last >= $(option @agents-services-interval 30) )) && ! { [[ -n $poller ]] && kill -0 "$poller" 2>/dev/null; }; then
+      poll_services &
+      poller=$!
+      last=$(date +%s)
+    fi
     sleep "$(option @agents-interval 2)"
   done
 }
@@ -234,7 +305,7 @@ rank() {
 
 # One fuzzy list of agents, sessions, windows and ssh hosts, Enter jumps there
 pick() {
-  local client=$1 icon out key target kind name connect
+  local client=$1 icon out key target kind name connect entries entry state detail
   local dim off=$'\e[0m'
   load_palette
   dim=$c_meta
@@ -268,6 +339,18 @@ pick() {
         while IFS=$sep read -r id place name path; do
           printf 'pane:%s%s  %swindow%s   %s %s %s%s%s\n' "$id" "$sep" "$dim" "$off" "$(plain "$place")" "$(plain "$name")" "$dim" "$(plain "$path")" "$off"
         done
+      read -r -a entries <<<"$(option @agents-services '')"
+      for entry in ${entries[@]+"${entries[@]}"}; do
+        key=$(printf '%s_%s' "${entry%%:*}" "${entry#*:}" | tr -c 'A-Za-z0-9_' '_')
+        IFS=$sep read -r state _ detail <<<"$(tmux show -gqv "@agents_svc_$key")"
+        case $state in
+          (blocked) icon="${c_blocked}!" ;;
+          (working) icon="${c_working}⠿" ;;
+          (idle) icon="${c_idle}○" ;;
+          (*) continue ;;
+        esac
+        printf 'ssh:%s%s%s %sservice%s  %-44s %s%s%s\n' "${entry%%:*}" "$sep" "$icon" "$dim" "$off" "${entry%%:*} › ${entry#*:}" "$dim" "$(plain "$detail")" "$off"
+      done
       ssh_hosts "$ssh_config" | awk '!seen[$0]++' | while read -r name; do
         printf 'ssh:%s%s  %sserver%s   %s\n' "$name" "$sep" "$dim" "$off" "$name"
       done
@@ -301,5 +384,6 @@ case ${1:-} in
   pick) pick "${2:-}" ;;
   classify) classify ;;
   hosts) ssh_hosts "$ssh_config" ;;
-  *) echo "usage: tmux-agents watch|stop|pick <client>|classify|hosts" >&2; exit 2 ;;
+  hermes-state) hermes_state "${2:?usage: tmux-agents hermes-state <host>}" ;;
+  *) echo "usage: tmux-agents watch|stop|pick <client>|classify|hosts|hermes-state <host>" >&2; exit 2 ;;
 esac

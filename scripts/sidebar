@@ -98,7 +98,7 @@ agent_row() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local remote= agents= hosts s idx local_host headless p rsess shost suser tree
+  local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t
   rows=() targets=()
   load_palette
   now=$(date +%s)
@@ -185,6 +185,17 @@ build() {
     new_row "$n"
   done <<<"$hosts"
 
+  # A service polled over ssh, such as hermes, has no pane, so its row opens a window on its host
+  read -r -a services <<<"$(tmux show -gqv @agents-services)"
+  for s in ${services[@]+"${services[@]}"}; do
+    p=$(printf '%s_%s' "${s%%:*}" "${s#*:}" | tr -c 'A-Za-z0-9_' '_')
+    IFS=$sep read -r state since detail <<<"$(tmux show -gqv "@agents_svc_$p")"
+    if [[ -n $state ]]; then
+      detail=$(plain "$detail")
+      agents+="$state$sep$since$sep${s%%:*}$sep${s#*:}${detail:+ · $detail}${sep}host:${s%%:*}"$'\n'
+    fi
+  done
+
   add_row ""
   add_row " ${c_head}Agents${c_fg}"
   for s in blocked working asking waiting idle; do
@@ -196,7 +207,11 @@ build() {
     add_row ""
     add_row " ${c_meta}$(tr '[:lower:]' '[:upper:]' <<<"${s:0:1}")${s:1}  $n${c_fg}"
     while IFS=$sep read -r state since name title id; do
-      agent_row "$state" "$since" "$name" "$title" "pane:$id"
+      t=pane:$id
+      if [[ $id == host:* ]]; then
+        t=$id
+      fi
+      agent_row "$state" "$since" "$name" "$title" "$t"
     done < <(printf '%s' "$agents" | grep "^$s$sep" | sort -t "$sep" -k2,2n)
   done
 }

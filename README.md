@@ -14,7 +14,7 @@ With [TPM](https://github.com/tmux-plugins/tpm):
 set -g @plugin 'gabrielkoerich/tmux-agents'
 ```
 
-Then press `prefix + I`. It needs tmux 3.3 or later for the popup, and [fzf](https://github.com/junegunn/fzf) for the picker. With [terminal-notifier](https://github.com/julienXX/terminal-notifier) installed, clicking a notification brings your terminal forward on the agent's pane; without it, macOS notifications only show. The scripts run on the bash 3.2 that macOS ships.
+Then press `prefix + I`. It needs tmux 3.3 or later for the popup, [fzf](https://github.com/junegunn/fzf) for the picker, and [jq](https://jqlang.org) to read services. With [terminal-notifier](https://github.com/julienXX/terminal-notifier) installed, clicking a notification brings your terminal forward on the agent's pane; without it, macOS notifications only show. The scripts run on the bash 3.2 that macOS ships.
 
 ## How it reads agents
 
@@ -73,6 +73,26 @@ Then create the socket folder once with `mkdir -p ~/.ssh/cm && chmod 700 ~/.ssh/
 | `ControlPersist 10m` | The shared connection stays open 10 minutes after its last window closes |
 
 ssh takes the first value it finds for each option, so a `Host *` block above your host blocks would win over a value one of them sets. None of these options is usually set per host, so any `Host *` block works. The cost of sharing: when the shared connection dies, every window on that server drops at once, and each one reconnects through `connect`.
+
+## Services on a server
+
+An agent that runs as a service, not in a pane, has no screen to read. The watcher polls such services over ssh, every 30 seconds by default, and lists each one with the agents in the sidebar and the picker. Clicking it opens a window on its host. Name them as `host:service`:
+
+```tmux
+set -g @agents-services 'vps-us:hermes'
+```
+
+`hermes` is the one service it knows: the [Hermes agent](https://github.com/NousResearch/hermes-agent) gateway. The watcher runs `cat ~/.hermes/gateway_state.json` on the host and takes four fields from it with `jq`:
+
+| The state file says | State |
+|---|---|
+| `gateway_state` is not `running` | blocked, "gateway stopped" |
+| a platform has `needs_attention` | blocked, "telegram needs attention" |
+| `active_agents` is above 0 | working, with `active_work` |
+| none of those | idle |
+| the host does not answer | idle, "unreachable", without a notification |
+
+The fields only ever reach the screen as plain text. With the ssh settings above, each poll reuses the open connection.
 
 A headless agent, such as `claude -p` run by an orchestrator, draws no screen and sets no title. If it runs in its own tmux session, list those sessions in `@agents-headless-sessions` and the watcher marks them working while the session exists. They leave the spaces of this computer, and the sidebar names each after its worktree folder, so `~/.orch/worktrees/orch/internal-42-fix-login` shows as `orch · fix-login`:
 
@@ -188,6 +208,8 @@ The picker takes its fzf colours from `@agents-fzf-colors`, so a theme can set t
 | `@agents-notify-app` | `com.mitchellh.ghostty` | Bundle id of the terminal a notification click brings forward |
 | `@agents-interval` | `2` | Seconds between scans |
 | `@agents-idle-after` | `600` | Seconds a finished turn waits before it counts as idle |
+| `@agents-services` | | `host:service` entries the watcher polls over ssh, `hermes` for now |
+| `@agents-services-interval` | `30` | Seconds between service polls |
 | `@agents-popup-style` | `bg=#101010` | Picker background |
 | `@agents-popup-border-style` | `fg=colour238,bg=#101010` | Picker border |
 | `@agents-fzf-colors` | dark, orange accent | fzf `--color` value for the picker |
