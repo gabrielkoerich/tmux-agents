@@ -168,15 +168,17 @@ watch() {
 # One fuzzy list of agents, sessions, windows and ssh hosts, Enter jumps there
 pick() {
   local client=$1 icon out key target kind name
-  local dim=$'\e[38;5;242m' off=$'\e[0m'
+  local dim off=$'\e[0m'
+  load_palette
+  dim=$c_meta
   out=$(
     {
       tmux list-panes -a -F "#{@agent_state}$sep#{pane_id}$sep#{pane_title}$sep#{session_name}:#{window_index}$sep#{pane_current_command}$sep#{pane_current_path}" |
         while IFS=$sep read -r state id title place cmd path; do
           case $state in
-            (blocked) icon=$'\e[38;5;203m!' ;;
-            (working) icon=$'\e[38;5;179m⠿' ;;
-            (idle) icon=$'\e[38;5;245m○' ;;
+            (blocked) icon="${c_blocked}!" ;;
+            (working) icon="${c_working}⠿" ;;
+            (idle) icon="${c_idle}○" ;;
             (*) continue ;;
           esac
 

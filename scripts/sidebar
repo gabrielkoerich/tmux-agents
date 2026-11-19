@@ -3,8 +3,8 @@
 set -uo pipefail
 
 source "$(dirname "$0")/lib.sh"
-c_head=$'\e[38;5;245m' c_meta=$'\e[38;5;242m' c_name=$'\e[38;5;252m' c_fg=$'\e[39m'
-c_on=$'\e[38;5;71m' c_blocked=$'\e[38;5;203m' c_working=$'\e[38;5;179m' c_idle=$'\e[38;5;245m'
+c_fg=$'\e[39m'
+# Badge colours when the theme sets no @thm_badges
 badge_bgs=(61 72 71 173 132 167 67 137)
 # Marks where a row returns to its own background, so the selected row keeps its highlight
 bg=$'\x01'
@@ -63,12 +63,17 @@ new_row() {
 }
 
 space_row() {
-  local name=$1 meta=$2 target=$3 color nw
-  color=${badge_bgs[$(( $(cksum <<<"$name" | cut -d' ' -f1) % ${#badge_bgs[@]} ))]}
+  local name=$1 meta=$2 target=$3 badge h nw
+  h=$(cksum <<<"$name" | cut -d' ' -f1)
+  if (( ${#badge_list[@]} > 0 )); then
+    badge=$(colour 48 "${badge_list[h % ${#badge_list[@]}]}" 61)$c_badge_fg
+  else
+    badge=$'\e[48;5;'"${badge_bgs[h % ${#badge_bgs[@]}]}"$'m\e[38;5;255m'
+  fi
   meta=$(fit "$meta" $(( width / 2 - 2 )))
   nw=$(( width - 7 - ${#meta} - 1 ))
   name=$(fit "$name" "$nw")
-  add_row "  "$'\e[48;5;'"${color};38;5;255;1m $(tr '[:lower:]' '[:upper:]' <<<"${name:0:1}") "$'\e[22m'"$bg${c_name} $name$(spaces $(( nw - ${#name} ))) ${c_meta}$meta${c_fg} " "$target"
+  add_row "  $badge"$'\e[1m'" $(tr '[:lower:]' '[:upper:]' <<<"${name:0:1}") "$'\e[22m'"$bg${c_name} $name$(spaces $(( nw - ${#name} ))) ${c_meta}$meta${c_fg} " "$target"
 }
 
 agent_row() {
@@ -93,6 +98,7 @@ build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
   local remote= agents= hosts s idx local_host headless p
   rows=() targets=()
+  load_palette
   now=$(date +%s)
   local_host=$(tmux display -p "#{host}")
   width=$(tmux display -p -t "$TMUX_PANE" '#{pane_width}')
@@ -194,7 +200,7 @@ draw() {
   for (( i = top; i < ${#rows[@]} && i < top + height; i++ )); do
     b=$'\e[49m'
     if (( i == sel )); then
-      b=$'\e[48;5;236m'
+      b=$c_sel
     fi
 
     line=${rows[i]//$bg/$b}

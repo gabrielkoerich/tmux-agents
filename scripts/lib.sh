@@ -60,3 +60,28 @@ task_name() {
   fi
   echo "$slug"
 }
+
+# An escape for a colour, kind 38 for text or 48 for background, from a #rrggbb theme value or a 256 colour fallback
+colour() {
+  if [[ $2 =~ ^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$ ]]; then
+    printf '\e[%s;2;%d;%d;%dm' "$1" "0x${BASH_REMATCH[1]}" "0x${BASH_REMATCH[2]}" "0x${BASH_REMATCH[3]}"
+  else
+    printf '\e[%s;5;%sm' "$1" "$3"
+  fi
+}
+
+# Reads the @thm_* palette a tmux theme sets, so the sidebar and picker follow it, with fixed colours when there is none
+load_palette() {
+  local muted fg green alert yellow surface dim badges
+  IFS='|' read -r muted fg green alert yellow surface dim badges <<<"$(tmux display -p '#{@thm_muted}|#{@thm_fg}|#{@thm_green}|#{@thm_alert}|#{@thm_yellow}|#{@thm_surface}|#{@thm_bg_dim}|#{@thm_badges}')"
+  c_head=$(colour 38 "$muted" 245)
+  c_meta=$(colour 38 "$muted" 242)
+  c_name=$(colour 38 "$fg" 252)
+  c_on=$(colour 38 "$green" 71)
+  c_blocked=$(colour 38 "$alert" 203)
+  c_working=$(colour 38 "$yellow" 179)
+  c_idle=$(colour 38 "$muted" 245)
+  c_sel=$(colour 48 "$surface" 236)
+  c_badge_fg=$(colour 38 "$dim" 255)
+  read -r -a badge_list <<<"$badges"
+}

@@ -109,6 +109,23 @@ The watcher sets the window option `@agent_alert` to `blocked` or `done` while a
 #{?#{==:#{@agent_alert},blocked},#[fg=colour196] !,}#{?#{==:#{@agent_alert},done},#[fg=colour46] ●,}
 ```
 
+## Colours
+
+The sidebar and the picker read a palette from tmux options, the same names the catppuccin tmux theme uses. Set them as `#rrggbb` and the plugin follows any theme you switch to. Unset, it keeps its own colours.
+
+| Option | Used for |
+|---|---|
+| `@thm_fg` | Names |
+| `@thm_muted` | Headings, meta and idle agents |
+| `@thm_surface` | The selected row |
+| `@thm_green` | Connected machines |
+| `@thm_yellow` | Working agents |
+| `@thm_alert` | Blocked agents |
+| `@thm_bg_dim` | Letters on badges |
+| `@thm_badges` | Space separated badge colours |
+
+The picker takes its fzf colours from `@agents-fzf-colors`, so a theme can set those too.
+
 ## Options
 
 | Option | Default | |
