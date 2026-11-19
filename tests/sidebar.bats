@@ -114,9 +114,9 @@ teardown() {
   printf '#!/bin/sh\ncat >/dev/null\nprintf "%%s\\n" "--stats--" "$STATS"\n' > "$BATS_TEST_TMPDIR/bin/ssh"
   chmod +x "$BATS_TEST_TMPDIR/bin/ssh"
   tmux set -g @agents-hosts box
-  STATS='12|1.5|0.30' "$BATS_TEST_DIRNAME/../scripts/agents" poll-sessions
+  STATS='12|45|0.30' "$BATS_TEST_DIRNAME/../scripts/agents" poll-sessions
   TMUX_PANE=$pane run "$bin" build
-  [[ $output == *"host:box|"*"12% 1.5G 0.30"* ]]
+  [[ $output == *"host:box|"*"12% 45% 0.30"* ]]
   STATS="$(printf '9|1|1\033]52;c;eA==\007')" "$BATS_TEST_DIRNAME/../scripts/agents" poll-sessions
   [ -z "$(tmux show -gqv @agents_stats_box)" ]
 }

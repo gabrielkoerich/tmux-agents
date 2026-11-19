@@ -288,7 +288,7 @@ poll_sessions() {
 
     # The stats come from the server too, so they are stored only when they are three numbers
     stats=$(sed -n '/^--stats--$/{n;p;}' <<<"$raw")
-    if [[ $stats =~ ^[0-9]{1,3}\|[0-9]+(\.[0-9]+)?\|[0-9]+(\.[0-9]+)?$ ]]; then
+    if [[ $stats =~ ^[0-9]{1,3}\|[0-9]{1,3}\|[0-9]+(\.[0-9]+)?$ ]]; then
       tmux set -g "@agents_stats_$key" "$stats"
     else
       tmux set -gu "@agents_stats_$key"

@@ -48,7 +48,7 @@ add_row() {
 }
 
 # A green dot while a connection is open, a grey ring for a pinned machine with none, and the stats the
-# watcher last read from it: cpu, memory in use and load
+# watcher last read from it: cpu and memory in use as a share, and load
 machine_row() {
   local name target=$2 dot=${c_on}● stats='' cpu mem load key
   if [[ ${3:-1} != 1 ]]; then
@@ -59,7 +59,7 @@ machine_row() {
     key=$(printf '%s' "${target#host:}" | tr -c 'A-Za-z0-9_' '_')
     IFS='|' read -r cpu mem load <<<"$(tmux show -gqv "@agents_stats_$key")"
     if [[ -n ${cpu:-} ]]; then
-      stats="$cpu% ${mem}G $load "
+      stats="$cpu% $mem% $load "
     fi
   fi
 
