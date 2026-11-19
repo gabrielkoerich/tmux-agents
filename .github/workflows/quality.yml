@@ -68,3 +68,24 @@ jobs:
 
       - name: Run tests
         run: bats tests
+
+  # tmux on macOS runs the scripts with its bash 3.2, so every version the scripts meet gets the tests
+  bats-bash:
+    name: bats (bash ${{ matrix.bash }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        bash: ["3.2", "4.4", "5.2"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The official bash image is Alpine, procps gives the ps options BusyBox lacks
+      - name: Run tests
+        run: |
+          docker run --rm -v "$PWD":/w -w /w "bash:${{ matrix.bash }}" sh -c '
+            apk add --no-cache tmux bats jq procps >/dev/null
+            echo "testing with $(bash -c "echo \$BASH_VERSION")"
+            bats tests
+          '
