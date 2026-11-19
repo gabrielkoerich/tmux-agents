@@ -1,0 +1,18 @@
+● The deploy needs a token for the staging registry.
+
+  1. You create the token in the registry console.
+  2. I store it and run the deploy.
+
+  Which registry do you use: the hosted one, or the one on the build box? That decides
+  the login step.
+
+✻ Cooked for 1m 37s · done 12:51 AM
+
+  12 tasks (8 done, 2 in progress, 2 open)
+  ◼ Move the cache to the new disk
+  ◼ Finish the audit
+
+───────────────────────────────────────────────────────── Deploy ─
+❯ 
+───────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

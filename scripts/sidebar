@@ -80,6 +80,8 @@ agent_row() {
   local state=$1 since=$2 name=$3 detail=$4 target=$5 icon color when lw text
   case $state in
     (blocked) icon='!' color=$c_blocked ;;
+    (asking) icon='?' color=$c_asking ;;
+    (done) icon='●' color=$c_on ;;
     (working) icon='⠿' color=$c_working ;;
     (*) icon='○' color=$c_idle ;;
   esac
@@ -174,7 +176,7 @@ build() {
 
   add_row ""
   add_row " ${c_head}Agents${c_fg}"
-  for s in blocked working idle; do
+  for s in blocked asking done working idle; do
     n=$(printf '%s' "$agents" | grep -c "^$s$sep")
     if (( n == 0 )); then
       continue

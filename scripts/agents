@@ -11,13 +11,40 @@ working_re='… \([0-9]+[hms]|esc to interrupt|esc interrupt'
 
 # Reads a screen on stdin, prints blocked or working, or nothing when no agent is busy
 classify() {
-  local screen
-  screen=$(grep -v '^[[:space:]]*$' | tail -n 15)
+  local raw screen
+  raw=$(cat)
+  screen=$(grep -v '^[[:space:]]*$' <<<"$raw" | tail -n 15)
   if [[ $screen =~ $blocked_re ]]; then
     echo blocked
   elif [[ $screen =~ $working_re ]]; then
     echo working
+  elif asks "$raw"; then
+    echo asking
   fi
+}
+
+# True when a finished turn ends on a question: the paragraph above the last turn marker, like
+# "✻ Cooked for 1m 37s", has a ? that ends a sentence. The marker skips the task list and input box below it
+asks() {
+  awk '
+    { line[NR] = $0 }
+    END {
+      for (i = NR; i > 0; i--) {
+        if (line[i] ~ /^[^ ].* for [0-9]+[hms]/) {
+          break
+        }
+      }
+      if (i == 0) {
+        exit 1
+      }
+      for (i--; i > 0 && line[i] ~ /^[[:space:]]*$/; i--) {
+      }
+      text = ""
+      for (; i > 0 && line[i] !~ /^[[:space:]]*$/; i--) {
+        text = line[i] " " text
+      }
+      exit !(text ~ /\?([[:space:]]|$)/)
+    }' <<<"$1"
 }
 
 # Prints every Host alias in an ssh config, following Include and skipping patterns
@@ -116,6 +143,11 @@ scan() {
       fi
     fi
 
+    # A turn that finishes out of view is done, your move, until you look at it and it becomes idle
+    if [[ $state == idle && $visible != 1 && ( $prev == working || $prev == done ) ]]; then
+      state=done
+    fi
+
     # Agents that predate the timestamp, or a restarted watcher, still get an age
     if [[ -n $state && $state == "$prev" && -z $since ]]; then
       tmux set -p -t "$id" @agent_since "$(date +%s)"
@@ -131,13 +163,15 @@ scan() {
       alert=
       if [[ $state == blocked ]]; then
         alert=blocked
-      elif [[ $prev == working && $state == idle ]]; then
+      elif [[ $state == asking ]]; then
+        alert=asking
+      elif [[ $state == done ]]; then
         alert=done
       fi
 
       if [[ -n $alert && $visible != 1 ]]; then
         tmux set -w -t "$win" @agent_alert "$alert"
-        notify "$(clean_title "$title")" "$place $( [[ $alert == blocked ]] && echo 'needs you' || echo 'finished')"
+        notify "$(clean_title "$title")" "$place $(case $alert in (blocked) echo 'needs you' ;; (asking) echo 'asks you' ;; (*) echo 'finished' ;; esac)"
       elif [[ $state == working && -n $cur ]]; then
         tmux set -wu -t "$win" @agent_alert
       fi
@@ -177,6 +211,8 @@ pick() {
         while IFS=$sep read -r state id title place cmd path; do
           case $state in
             (blocked) icon="${c_blocked}!" ;;
+            (asking) icon="${c_asking}?" ;;
+            (done) icon="${c_on}●" ;;
             (working) icon="${c_working}⠿" ;;
             (idle) icon="${c_idle}○" ;;
             (*) continue ;;

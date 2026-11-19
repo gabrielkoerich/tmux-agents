@@ -20,6 +20,11 @@ setup() {
   [ "$output" = blocked ]
 }
 
+@test "a finished turn that ends on a question reads as asking" {
+  run "$bin" classify < "$fx/asking.txt"
+  [ "$output" = asking ]
+}
+
 @test "a finished turn reads as nothing, so the caller decides idle" {
   run "$bin" classify < "$fx/idle.txt"
   [ -z "$output" ]

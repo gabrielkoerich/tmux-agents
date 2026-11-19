@@ -72,14 +72,15 @@ colour() {
 
 # Reads the @thm_* palette a tmux theme sets, so the sidebar and picker follow it, with fixed colours when there is none
 load_palette() {
-  local muted fg green alert yellow surface dim badges
-  IFS='|' read -r muted fg green alert yellow surface dim badges <<<"$(tmux display -p '#{@thm_muted}|#{@thm_fg}|#{@thm_green}|#{@thm_alert}|#{@thm_yellow}|#{@thm_surface}|#{@thm_bg_dim}|#{@thm_badges}')"
+  local muted fg green alert yellow blue surface dim badges
+  IFS='|' read -r muted fg green alert yellow blue surface dim badges <<<"$(tmux display -p '#{@thm_muted}|#{@thm_fg}|#{@thm_green}|#{@thm_alert}|#{@thm_yellow}|#{@thm_blue}|#{@thm_surface}|#{@thm_bg_dim}|#{@thm_badges}')"
   c_head=$(colour 38 "$muted" 245)
   c_meta=$(colour 38 "$muted" 242)
   c_name=$(colour 38 "$fg" 252)
   c_on=$(colour 38 "$green" 71)
   c_blocked=$(colour 38 "$alert" 203)
   c_working=$(colour 38 "$yellow" 179)
+  c_asking=$(colour 38 "$blue" 75)
   c_idle=$(colour 38 "$muted" 245)
   c_sel=$(colour 48 "$surface" 236)
   c_badge_fg=$(colour 38 "$dim" 255)

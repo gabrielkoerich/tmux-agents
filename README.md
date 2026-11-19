@@ -2,7 +2,7 @@
 
 A tmux plugin that tracks Claude Code, Codex and OpenCode in your panes, on this machine and on servers you reach over ssh. Nothing is installed on the servers and the agents need no hooks.
 
-- A watcher marks each pane `working`, `blocked` or `idle`, and sends a desktop notification when an agent out of view finishes or waits on you.
+- A watcher marks each agent `working`, `blocked` on a permission prompt, `asking` when its turn ends on a question, `done` when a turn finished out of view, or `idle` once you have seen it. It sends a desktop notification when an agent out of view finishes or waits on you.
 - `prefix + Space` opens go to anywhere, a fuzzy list of agents, sessions, windows and the hosts in `~/.ssh/config`.
 - `prefix + a` opens a sidebar with your machines, the spaces on each, and the agents by state.
 
@@ -21,7 +21,7 @@ Then press `prefix + I`. It needs tmux 3.3 or later for the popup, and [fzf](htt
 An ssh pane only shows tmux the `ssh` process, so the agent's state has to come from what reaches the terminal.
 
 1. If tmux keeps [OSC 7501](https://www.superlogical.com/rex/docs/build/program-status) program status, as `#{pane_program_status_states}`, the watcher uses it. Claude Code, Codex and OpenCode 2 send it. Stock tmux does not keep it yet ([tmux#5713](https://github.com/tmux/tmux/issues/5713)).
-2. Otherwise it reads the bottom of the pane: a spinner line with elapsed time means working, a permission menu means blocked.
+2. Otherwise it reads the bottom of the pane: a spinner line with elapsed time means working, a permission menu means blocked, and a finished turn whose last paragraph asks a question, the one above a marker like `✻ Cooked for 1m 37s`, means asking.
 
 Screen reading breaks when an agent changes its UI text. The tests in `tests/fixtures` hold the screens it matches.
 
@@ -103,10 +103,10 @@ set -g automatic-rename-format '#{?#{&&:#{m/r:^[^a-zA-Z0-9 ]+ ,#{pane_title}},#{
 
 ## Status bar
 
-The watcher sets the window option `@agent_alert` to `blocked` or `done` while an agent out of view needs you, and clears it when you open the window. Show it in your window format:
+The watcher sets the window option `@agent_alert` to `blocked`, `asking` or `done` while an agent out of view needs you, and clears it when you open the window. Show it in your window format:
 
 ```tmux
-#{?#{==:#{@agent_alert},blocked},#[fg=colour196] !,}#{?#{==:#{@agent_alert},done},#[fg=colour46] ●,}
+#{?#{==:#{@agent_alert},blocked},#[fg=colour196] !,}#{?#{==:#{@agent_alert},asking},#[fg=colour75] ?,}#{?#{==:#{@agent_alert},done},#[fg=colour46] ●,}
 ```
 
 ## Colours
@@ -118,9 +118,10 @@ The sidebar and the picker read a palette from tmux options, the same names the 
 | `@thm_fg` | Names |
 | `@thm_muted` | Headings, meta and idle agents |
 | `@thm_surface` | The selected row |
-| `@thm_green` | Connected machines |
+| `@thm_green` | Connected machines and done agents |
 | `@thm_yellow` | Working agents |
 | `@thm_alert` | Blocked agents |
+| `@thm_blue` | Agents asking a question |
 | `@thm_bg_dim` | Letters on badges |
 | `@thm_badges` | Space separated badge colours |
 
