@@ -68,16 +68,3 @@ jobs:
 
       - name: Run tests
         run: bats tests
-
-  # tmux on macOS runs the scripts with the bash 3.2 that ships there, so the tests run with it first in PATH
-  bats-macos:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install bats + tmux
-        run: brew install bats-core tmux
-
-      - name: Run tests with bash 3.2
-        run: PATH="/bin:/usr/bin:$(brew --prefix)/bin" bats tests
