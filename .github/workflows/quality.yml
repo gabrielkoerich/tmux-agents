@@ -1,0 +1,82 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck + ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck ripgrep
+
+      - name: Bash syntax check
+        run: |
+          for f in agents.tmux scripts/* bin/*; do
+            bash -n "$f"
+          done
+
+      - name: Security audit strict
+        run: ./bin/security-audit --strict
+
+  semgrep-and-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install shellcheck + ripgrep + semgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck ripgrep
+          python3 -m pip install --upgrade pip
+          python3 -m pip install semgrep
+
+      - name: Run strict audit with semgrep required
+        env:
+          SECURITY_AUDIT_REQUIRE_SEMGREP: "1"
+        run: ./bin/security-audit --strict
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: detect --source . --config .gitleaks.toml --no-banner --redact --exit-code=1
+
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install bats + tmux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats tmux
+
+      - name: Run tests
+        run: bats tests
+
+  # tmux on macOS runs the scripts with the bash 3.2 that ships there, so the tests run with it first in PATH
+  bats-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install bats + tmux
+        run: brew install bats-core tmux
+
+      - name: Run tests with bash 3.2
+        run: PATH="/bin:/usr/bin:$(brew --prefix)/bin" bats tests

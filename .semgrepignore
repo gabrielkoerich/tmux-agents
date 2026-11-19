@@ -1,0 +1,2 @@
+# The audit names the patterns it looks for, so it matches its own rules
+bin/security-audit
