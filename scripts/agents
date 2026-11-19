@@ -95,12 +95,19 @@ option() {
   echo "${v:-$2}"
 }
 
+# Clicking a terminal-notifier notification jumps the most recent terminal to the pane, osascript can only show it
 notify() {
+  local tmux_bin jump
   if [[ $(option @agents-notify on) != on ]]; then
     return
   fi
 
-  if command -v osascript >/dev/null; then
+  if command -v terminal-notifier >/dev/null; then
+    tmux_bin=$(command -v tmux)
+    jump="c=\$($tmux_bin list-clients -F '#{client_activity} #{client_name}' | sort -rn | head -1 | cut -d' ' -f2); $tmux_bin switch-client -c \"\$c\" -t '$3' \\; select-window -t '$3' \\; select-pane -t '$3'"
+    terminal-notifier -title "$1" -message "$2" -sound Glass -group "tmux-agents-$3" \
+      -execute "$jump" -activate "$(option @agents-notify-app com.mitchellh.ghostty)" >/dev/null 2>&1 &
+  elif command -v osascript >/dev/null; then
     osascript -e 'on run argv' \
       -e 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"' \
       -e 'end run' "$1" "$2" >/dev/null 2>&1 &
@@ -173,7 +180,7 @@ scan() {
 
       if [[ -n $alert && $visible != 1 ]]; then
         tmux set -w -t "$win" @agent_alert "$alert"
-        notify "$(clean_title "$title")" "$place $(case $alert in (blocked) echo 'needs you' ;; (asking) echo 'asks you' ;; (*) echo 'finished' ;; esac)"
+        notify "$(clean_title "$title")" "$place $(case $alert in (blocked) echo 'needs you' ;; (asking) echo 'asks you' ;; (*) echo 'finished' ;; esac)" "$id"
       elif [[ $state == working && -n $cur ]]; then
         tmux set -wu -t "$win" @agent_alert
       fi
@@ -201,6 +208,17 @@ watch() {
   done
 }
 
+# Most urgent first: blocked, working, asking, waiting, idle
+rank() {
+  case $1 in
+    (blocked) echo 1 ;;
+    (working) echo 2 ;;
+    (asking) echo 3 ;;
+    (waiting) echo 4 ;;
+    (*) echo 5 ;;
+  esac
+}
+
 # One fuzzy list of agents, sessions, windows and ssh hosts, Enter jumps there
 pick() {
   local client=$1 icon out key target kind name
@@ -223,8 +241,8 @@ pick() {
           if [[ $cmd =~ $ssh_cmds ]]; then
             path=ssh
           fi
-          printf '%s%s%s%s %sagent%s    %-44s %s%s · %s%s\n' "$state" "$sep" "pane:$id$sep" "$icon" "$dim" "$off" "$cmd › $(clean_title "$title")" "$dim" "${path##*/}" "$place" "$off"
-        done | sort -t "$sep" -k1,1 | cut -d "$sep" -f2-
+          printf '%s%s%s%s %sagent%s    %-44s %s%s · %s%s\n' "$(rank "$state")" "$sep" "pane:$id$sep" "$icon" "$dim" "$off" "$cmd › $(clean_title "$title")" "$dim" "${path##*/}" "$place" "$off"
+        done | sort -s -t "$sep" -k1,1n | cut -d "$sep" -f2-
       tmux list-sessions -F "session:#{session_name}$sep  ${dim}session${off}  #{session_name} ${dim}#{session_windows} windows${off}"
       tmux list-windows -a -F "pane:#{pane_id}$sep  ${dim}window${off}   #{session_name}:#{window_index} #{window_name} ${dim}#{s|$HOME|~|:pane_current_path}${off}"
       ssh_hosts "$ssh_config" | awk '!seen[$0]++' | while read -r name; do

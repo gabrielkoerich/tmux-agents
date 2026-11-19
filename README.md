@@ -14,7 +14,7 @@ With [TPM](https://github.com/tmux-plugins/tpm):
 set -g @plugin 'gabrielkoerich/tmux-agents'
 ```
 
-Then press `prefix + I`. It needs tmux 3.3 or later for the popup, and [fzf](https://github.com/junegunn/fzf) for the picker. The scripts run on the bash 3.2 that macOS ships.
+Then press `prefix + I`. It needs tmux 3.3 or later for the popup, and [fzf](https://github.com/junegunn/fzf) for the picker. With [terminal-notifier](https://github.com/julienXX/terminal-notifier) installed, clicking a notification brings your terminal forward on the agent's pane; without it, macOS notifications only show. The scripts run on the bash 3.2 that macOS ships.
 
 ## How it reads agents
 
@@ -137,6 +137,7 @@ The picker takes its fzf colours from `@agents-fzf-colors`, so a theme can set t
 | `@agents-hosts` | | Machines the sidebar always shows, in order |
 | `@agents-headless-sessions` | | Session globs that run a headless agent |
 | `@agents-notify` | `on` | Desktop notifications |
+| `@agents-notify-app` | `com.mitchellh.ghostty` | Bundle id of the terminal a notification click brings forward |
 | `@agents-interval` | `2` | Seconds between scans |
 | `@agents-idle-after` | `600` | Seconds a finished turn waits before it counts as idle |
 | `@agents-popup-style` | `bg=#101010` | Picker background |

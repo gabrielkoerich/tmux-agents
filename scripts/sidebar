@@ -176,7 +176,7 @@ build() {
 
   add_row ""
   add_row " ${c_head}Agents${c_fg}"
-  for s in blocked asking waiting working idle; do
+  for s in blocked working asking waiting idle; do
     n=$(printf '%s' "$agents" | grep -c "^$s$sep")
     if (( n == 0 )); then
       continue
