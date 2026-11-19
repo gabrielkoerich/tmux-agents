@@ -231,11 +231,11 @@ activate() {
   case $kind:$new in
     (session:) tmux switch-client -c "$client" -t "=$name" ;;
     (pane:) tmux switch-client -c "$client" -t "$name" \; select-window -t "$name" \; select-pane -t "$name" ;;
-    (host:*) tmux new-window -n "$name" "ssh $name" ;;
+    (host:*) tmux new-window "ssh $name" ;;
     (session:1) tmux new-window -t "=$name:" ;;
     (pane:1)
       if [[ -n $host ]]; then
-        tmux new-window -n "$host" "ssh $host"
+        tmux new-window "ssh $host"
       fi
       ;;
   esac
