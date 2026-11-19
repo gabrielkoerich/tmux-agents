@@ -52,10 +52,10 @@ headless_session() {
   return 1
 }
 
-# A runner that works in a worktree names the task after its folder, minus a leading id like internal-596326-
+# A runner that works in a worktree names the task after its folder, minus a leading id like internal-596326- or gh-issue-4133-
 task_name() {
   local slug=${1##*/}
-  if [[ $slug =~ ^[A-Za-z]+-[0-9]+-(.+)$ ]]; then
+  if [[ $slug =~ ^[A-Za-z][A-Za-z-]*-[0-9]+-(.+)$ ]]; then
     slug=${BASH_REMATCH[1]}
   fi
   echo "$slug"
