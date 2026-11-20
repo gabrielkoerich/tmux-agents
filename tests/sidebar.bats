@@ -1,10 +1,11 @@
 #!/usr/bin/env bats
 
-# Each test gets its own tmux server, with no config so no watcher runs
+# Each test gets its own tmux server, with no config so no watcher runs, and its socket in the test's own
+# folder, which bats removes, so a run leaves no socket behind in the shared tmux folder
 setup() {
   bin="$BATS_TEST_DIRNAME/../scripts/sidebar"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
-  printf '#!/bin/sh\nexec %s -L bats-%s -f /dev/null "$@"\n' "$(command -v tmux)" "$$" > "$BATS_TEST_TMPDIR/bin/tmux"
+  printf '#!/bin/sh\nexec %s -S %s/tmux.sock -f /dev/null "$@"\n' "$(command -v tmux)" "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/bin/tmux"
   chmod +x "$BATS_TEST_TMPDIR/bin/tmux"
   PATH="$BATS_TEST_TMPDIR/bin:$PATH"
   tmux new -d -s main -x 120 -y 40
