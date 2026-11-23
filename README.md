@@ -172,6 +172,16 @@ set -g automatic-rename on
 set -g automatic-rename-format '#{?#{&&:#{m/r:^[^a-zA-Z0-9 ]+ ,#{pane_title}},#{!:#{m/r:^(zsh|bash|fish|sh)$,#{pane_current_command}}}},#{?#{@ssh_host},#{@ssh_host},#{pane_current_command}} › #{s|^[^a-zA-Z0-9 ]+ ||:pane_title},#{?#{m/r:^(ssh|mosh-client)$,#{pane_current_command}},#{?#{@ssh_host},#{@ssh_host},ssh},#{?#{m/r:^(zsh|bash|fish|sh)$,#{pane_current_command}},#{b:pane_current_path},#{pane_current_command} #{b:pane_current_path}}}}'
 ```
 
+## Sessions as tabs
+
+`@agents-tabs` picks what the top of the screen shows. `windows`, the default, keeps tmux's window tabs and lists your sessions under this computer in the sidebar. `sessions` turns that around: the sidebar lists the windows of the session you are in, and your status bar can loop over sessions. The watcher keeps `@agent_session_alert` on each session, the most urgent alert among its windows, for a mark on a session tab:
+
+```tmux
+set -g @agents-tabs sessions
+# in status-format, in place of the #{W:…} window loop:
+#{S:#[range=session|#{session_id}]#{?@agent_session_alert, !,} #{session_name} #[norange default],#[range=session|#{session_id}]#[underscore]#{session_name}#[nounderscore] #[norange default]}
+```
+
 ## Status bar
 
 The watcher sets the window option `@agent_alert` to `blocked`, `asking` or `done` while an agent out of view needs you, and clears it when you open the window. Show it in your window format:

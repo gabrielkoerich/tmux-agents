@@ -121,3 +121,25 @@ teardown() {
   STATS="$(printf '9|1|1\033]52;c;eA==\007')" "$BATS_TEST_DIRNAME/../scripts/agents" poll-sessions
   [ -z "$(tmux show -gqv @agents_stats_box)" ]
 }
+
+@test "with sessions as tabs, this computer lists the windows of the sidebar's session" {
+  tmux set -g @agents-tabs sessions
+  tmux rename-window -t main:0 editor
+  second=$(tmux new-window -d -P -F '#{pane_id}' -t main -n logs)
+  TMUX_PANE=$pane run "$bin" build
+  [[ $output == *"pane:$second|"*"logs"* ]]
+  [[ $output == *"editor"* ]]
+  [[ $output != *"session:work|"* ]]
+}
+
+@test "a session's tab mark is the most urgent alert among its windows" {
+  w1=$(tmux new-window -d -P -F '#{window_id}' -t work)
+  w2=$(tmux new-window -d -P -F '#{window_id}' -t work)
+  tmux set -w -t "$w1" @agent_alert done \; set -w -t "$w2" @agent_alert blocked
+  "$BATS_TEST_DIRNAME/../scripts/agents" roll-up
+  [ "$(tmux show -qv -t work @agent_session_alert)" = blocked ]
+  [ -z "$(tmux show -qv -t main @agent_session_alert)" ]
+  tmux set -wu -t "$w2" @agent_alert
+  "$BATS_TEST_DIRNAME/../scripts/agents" roll-up
+  [ "$(tmux show -qv -t work @agent_session_alert)" = done ]
+}

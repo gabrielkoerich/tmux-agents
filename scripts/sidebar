@@ -134,13 +134,13 @@ agent_row() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t open rs all_remote
+  local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t open rs all_remote pact tabs my_sess
   rows=() targets=()
   load_palette
   now=$(date +%s)
   local_host=$(tmux display -p "#{host}")
   width=$(tmux display -p -t "$TMUX_PANE" '#{pane_width}')
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@agents_tree}$sep#{pane_title}")
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{pane_active}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@agents_tree}$sep#{pane_title}")
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
@@ -148,8 +148,10 @@ build() {
   add_row " ${c_head}Spaces${c_fg}"
   add_row ""
   machine_row "This computer" ""
+  tabs=$(tmux show -gqv @agents-tabs)
+  my_sess=$(tmux display -p -t "$TMUX_PANE" '#{session_name}')
   headless=$(v=$(tmux show -gqv @agents-headless-sessions); echo "$v")
-  while IFS=$sep read -r id pid cmd sess win path active state since wname idx rsess shost suser tree title; do
+  while IFS=$sep read -r id pid cmd sess win path active pact state since wname idx rsess shost suser tree title; do
     title=$(plain "$title")
     wname=$(plain "$wname")
     if [[ -n $headless ]] && headless_session "$sess" "$headless"; then
@@ -160,7 +162,12 @@ build() {
       continue
     fi
 
-    if [[ $active == 1 ]]; then
+    # With sessions as tabs, this computer lists the windows of the session the sidebar is in
+    if [[ $tabs == sessions ]]; then
+      if [[ $pact == 1 && $sess == "$my_sess" ]]; then
+        space_row "$wname" "$idx" "pane:$id"
+      fi
+    elif [[ $active == 1 ]]; then
       space_row "$sess" "$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)" "session:$sess"
     fi
 
@@ -342,7 +349,7 @@ follow() {
 
   active=$(tmux display -p -t "$win" '#{pane_id}')
   for i in "${!targets[@]}"; do
-    if [[ ${targets[i]} == "pane:$active@"* ]]; then
+    if [[ ${targets[i]} == "pane:$active@"* || ${targets[i]} == "pane:$active" ]]; then
       sel=$i
       return
     fi
