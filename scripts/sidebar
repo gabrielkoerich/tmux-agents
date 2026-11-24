@@ -113,7 +113,7 @@ space_row() {
 }
 
 agent_row() {
-  local state=$1 since=$2 name=$3 detail=$4 target=$5 icon color when lw text
+  local state=$1 since=$2 name=$3 detail=$4 target=$5 subs=${6:-} icon color when lw text
   case $state in
     (blocked) icon='!' color=$c_blocked ;;
     (asking) icon='?' color=$c_asking ;;
@@ -122,6 +122,10 @@ agent_row() {
     (*) icon='○' color=$c_idle ;;
   esac
   when=$(age "$since")
+  # The subagents this Claude runs, from the watcher's count
+  if [[ $subs =~ ^[1-9][0-9]*$ ]]; then
+    when="⑂$subs $when"
+  fi
   lw=$(( width - 6 - ${#when} ))
   name=$(fit "$name" "$lw")
   text=$name
@@ -134,13 +138,13 @@ agent_row() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t open rs all_remote pact tabs my_sess
+  local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t open rs all_remote pact tabs my_sess subs
   rows=() targets=()
   load_palette
   now=$(date +%s)
   local_host=$(tmux display -p "#{host}")
   width=$(tmux display -p -t "$TMUX_PANE" '#{pane_width}')
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{pane_active}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@agents_tree}$sep#{pane_title}")
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{pane_active}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@agents_tree}$sep#{@agent_subagents}$sep#{pane_title}")
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
@@ -151,7 +155,7 @@ build() {
   tabs=$(tmux show -gqv @agents-tabs)
   my_sess=$(tmux display -p -t "$TMUX_PANE" '#{session_name}')
   headless=$(v=$(tmux show -gqv @agents-headless-sessions); echo "$v")
-  while IFS=$sep read -r id pid cmd sess win path active pact state since wname idx rsess shost suser tree title; do
+  while IFS=$sep read -r id pid cmd sess win path active pact state since wname idx rsess shost suser tree subs title; do
     title=$(plain "$title")
     wname=$(plain "$wname")
     if [[ -n $headless ]] && headless_session "$sess" "$headless"; then
@@ -204,7 +208,7 @@ build() {
     if [[ -n $state ]]; then
       name=${path##*/}
       name=${host:-$name}
-      agents+="$state$sep$since$sep$name$sep$(clean_title "$title")$sep$id"$'\n'
+      agents+="$state$sep$since$sep$name$sep$(clean_title "$title")$sep$id$sep$subs"$'\n'
     fi
   done <<<"$panes"
 
@@ -253,12 +257,12 @@ build() {
 
     add_row ""
     add_row " ${c_meta}$(tr '[:lower:]' '[:upper:]' <<<"${s:0:1}")${s:1}  $n${c_fg}"
-    while IFS=$sep read -r state since name title id; do
+    while IFS=$sep read -r state since name title id subs; do
       t=pane:$id
       if [[ $id == host:* ]]; then
         t=$id
       fi
-      agent_row "$state" "$since" "$name" "$title" "$t"
+      agent_row "$state" "$since" "$name" "$title" "$t" "$subs"
     done < <(printf '%s' "$agents" | grep "^$s$sep" | sort -t "$sep" -k2,2n)
   done
 }

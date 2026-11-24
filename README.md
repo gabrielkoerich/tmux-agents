@@ -78,6 +78,10 @@ Then create the socket folder once with `mkdir -p ~/.ssh/cm && chmod 700 ~/.ssh/
 
 ssh takes the first value it finds for each option, so a `Host *` block above your host blocks would win over a value one of them sets. None of these options is usually set per host, so any `Host *` block works. The cost of sharing: when the shared connection dies, every window on that server drops at once, and each one reconnects through `connect`.
 
+## Subagents
+
+A local Claude that runs subagents shows how many on its row, `⠿ suq · fix login  ⑂3  4m`. Claude keeps each subagent's transcript in `~/.claude/projects/<folder>/<session>/subagents/agent-*.jsonl`, and the watcher counts the ones written in the last 2 minutes, every 10 seconds. It reads names and times, never what the files hold. Two Claude sessions in one folder share the count, and a subagent quiet for over 2 minutes in one long tool call drops out until it writes again.
+
 ## Services on a server
 
 An agent that runs as a service, not in a pane, has no screen to read. The watcher polls such services over ssh, every 30 seconds by default, and lists each one with the agents in the sidebar and the picker. Clicking it opens a window on its host. Name them as `host:service`:

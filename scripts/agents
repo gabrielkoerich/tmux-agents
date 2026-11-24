@@ -149,8 +149,8 @@ notify() {
 }
 
 scan() {
-  local panes id win cmd prev cur visible place pss pid host rsess remote since path found title state alert headless idle_after now ps_out=
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{window_id}$sep#{pane_current_command}$sep#{@agent_state}$sep#{@agent_alert}$sep#{&&:#{window_active},#{session_attached}}$sep#{session_name}:#{window_index}$sep#{pane_program_status_states}$sep#{pane_pid}$sep#{@ssh_host}$sep#{@remote_session}$sep#{@agent_since}$sep#{pane_current_path}$sep#{pane_title}") || exit 0
+  local panes id win cmd prev cur visible place pss pid host rsess remote since subs path found title state alert headless idle_after now ps_out=
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{window_id}$sep#{pane_current_command}$sep#{@agent_state}$sep#{@agent_alert}$sep#{&&:#{window_active},#{session_attached}}$sep#{session_name}:#{window_index}$sep#{pane_program_status_states}$sep#{pane_pid}$sep#{@ssh_host}$sep#{@remote_session}$sep#{@agent_since}$sep#{@agent_subagents}$sep#{pane_current_path}$sep#{pane_title}") || exit 0
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
@@ -158,7 +158,7 @@ scan() {
   headless=$(option @agents-headless-sessions '')
   idle_after=$(option @agents-idle-after 600)
   now=$(date +%s)
-  while IFS=$sep read -r id win cmd prev cur visible place pss pid host rsess since path title; do
+  while IFS=$sep read -r id win cmd prev cur visible place pss pid host rsess since subs path title; do
     # A pane connect opened runs ssh under a bash loop, so tmux reports bash, and connect sets the host itself
     remote=
     if [[ $cmd =~ $ssh_cmds || -n $rsess ]]; then
@@ -198,6 +198,20 @@ scan() {
       state=waiting
     fi
 
+    # A local Claude's running subagents, counted every 10 seconds, since its files change less often than its screen
+    if [[ $cmd == claude && -n $state && $(( now - ${subs_at:-0} )) -ge 10 ]]; then
+      found=$(subagents_in "$path")
+      if [[ $found != "${subs:-0}" ]]; then
+        if (( found > 0 )); then
+          tmux set -p -t "$id" @agent_subagents "$found"
+        else
+          tmux set -pu -t "$id" @agent_subagents
+        fi
+      fi
+    elif [[ -n $subs && $cmd != claude ]]; then
+      tmux set -pu -t "$id" @agent_subagents
+    fi
+
     # Agents that predate the timestamp, or a restarted watcher, still get an age
     if [[ -n $state && $state == "$prev" && -z $since ]]; then
       tmux set -p -t "$id" @agent_since "$(date +%s)"
@@ -231,6 +245,9 @@ scan() {
       tmux set -wu -t "$win" @agent_alert 2>/dev/null
     fi
   done <<<"$panes"
+  if (( now - ${subs_at:-0} >= 10 )); then
+    subs_at=$now
+  fi
 
   roll_up_sessions
 }
@@ -284,6 +301,20 @@ hermes_state() {
   else
     printf 'idle\n\n'
   fi
+}
+
+# Counts the subagents a Claude session in this folder is running: Claude keeps each one's transcript in
+# ~/.claude/projects/<folder with every other character as ->/<session>/subagents/agent-*.jsonl, and one
+# written in the last 2 minutes is running. Only names and times are read, never what the files hold
+subagents_in() {
+  local dir
+  dir="$HOME/.claude/projects/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  if [[ ! -d $dir ]]; then
+    echo 0
+    return
+  fi
+
+  find "$dir" -path '*/subagents/agent-*.jsonl' -mmin -2 2>/dev/null | wc -l | tr -d ' '
 }
 
 # Polls every host:service in @agents-services and keeps each one's state in @agents_svc_<host>_<service>
@@ -391,8 +422,8 @@ pick() {
   dim=$c_meta
   out=$(
     {
-      tmux list-panes -a -F "#{@agent_state}$sep#{pane_id}$sep#{pane_title}$sep#{session_name}:#{window_index}$sep#{pane_current_command}$sep#{@ssh_host}$sep#{pane_current_path}" |
-        while IFS=$sep read -r state id title place cmd shost path; do
+      tmux list-panes -a -F "#{@agent_state}$sep#{pane_id}$sep#{pane_title}$sep#{session_name}:#{window_index}$sep#{pane_current_command}$sep#{@ssh_host}$sep#{@agent_subagents}$sep#{pane_current_path}" |
+        while IFS=$sep read -r state id title place cmd shost subs path; do
           title=$(plain "$title")
           place=$(plain "$place")
           case $state in
@@ -408,7 +439,7 @@ pick() {
             cmd=$shost
             path=ssh
           fi
-          printf '%s%s%s%s %sagent%s    %-44s %s%s · %s%s\n' "$(rank "$state")" "$sep" "pane:$id$sep" "$icon" "$dim" "$off" "$cmd › $(clean_title "$title")" "$dim" "${path##*/}" "$place" "$off"
+          printf '%s%s%s%s %sagent%s    %-44s %s%s · %s%s\n' "$(rank "$state")" "$sep" "pane:$id$sep" "$icon" "$dim" "$off" "$cmd › $(clean_title "$title")${subs:+ ⑂$subs}" "$dim" "${path##*/}" "$place" "$off"
         done | sort -s -t "$sep" -k1,1n | cut -d "$sep" -f2-
       tmux list-sessions -F "#{session_name}$sep#{session_windows}" | while IFS=$sep read -r name count; do
         name=$(plain "$name")
@@ -477,6 +508,7 @@ case ${1:-} in
     poll_sessions
     ;;
   roll-up) roll_up_sessions ;;
+  subagents) subagents_in "${2:?usage: tmux-agents subagents <folder>}" ;;
   hermes-state) hermes_state "${2:?usage: tmux-agents hermes-state <host>}" ;;
   *) echo "usage: tmux-agents watch|stop|pick <client>|classify|hosts|hermes-state <host>" >&2; exit 2 ;;
 esac

@@ -78,3 +78,15 @@ hermes() {
   hermes "{\"gateway_state\":\"running\",\"active_agents\":1,\"active_work\":\"job\\u001b]52;c;ZXZpbA==\\u0007 done\",\"platforms\":{}}"
   [ "$output" = "$(printf 'working\njob]52;c;ZXZpbA== done')" ]
 }
+
+@test "subagents counts the transcripts written in the last two minutes, from names and times only" {
+  export HOME="$BATS_TEST_TMPDIR/home"
+  proj="$HOME/.claude/projects/-work-my-app"
+  mkdir -p "$proj/s1/subagents" "$proj/s2/subagents"
+  touch "$proj/s1/subagents/agent-a.jsonl" "$proj/s2/subagents/agent-b.jsonl"
+  touch -t 202001010000 "$proj/s1/subagents/agent-old.jsonl"
+  run "$bin" subagents /work/my.app
+  [ "$output" = 2 ]
+  run "$bin" subagents /nowhere
+  [ "$output" = 0 ]
+}
