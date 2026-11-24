@@ -395,6 +395,13 @@ sidebar() {
   top=0
   last_frame=
   while true; do
+    # A sidebar in a window nobody is looking at does nothing but check again, each costs about 1.5% cpu awake
+    if [[ $(tmux display -p -t "$TMUX_PANE" '#{&&:#{window_active},#{session_attached}}') != 1 ]]; then
+      last_frame=
+      IFS= read -rsn1 -t 2 key || true
+      continue
+    fi
+
     # tmux shares space out again when a window's layout changes, so the sidebar sets its own width back
     want=$(option @agents-sidebar-width 32)
     if [[ $want =~ ^[0-9]+$ && $(tmux display -p -t "$TMUX_PANE" '#{pane_width}') != "$want" ]]; then
