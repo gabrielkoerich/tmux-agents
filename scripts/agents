@@ -465,6 +465,17 @@ case ${1:-} in
   classify) classify ;;
   hosts) ssh_hosts "$ssh_config" ;;
   poll-sessions) poll_sessions ;;
+  end-session)
+    # Both come from the sidebar, the name as poll_sessions cleaned it, and are checked again before ssh
+    host=${2:?usage: tmux-agents end-session <host> <session>}
+    name=${3:?usage: tmux-agents end-session <host> <session>}
+    if [[ ! $name =~ ^[A-Za-z0-9_.-]+$ || ! $host =~ ^[A-Za-z0-9_.@-]+$ ]]; then
+      echo "tmux-agents: refusing a session or host name with other characters" >&2
+      exit 2
+    fi
+    ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" "tmux kill-session -t '=$name'"
+    poll_sessions
+    ;;
   roll-up) roll_up_sessions ;;
   hermes-state) hermes_state "${2:?usage: tmux-agents hermes-state <host>}" ;;
   *) echo "usage: tmux-agents watch|stop|pick <client>|classify|hosts|hermes-state <host>" >&2; exit 2 ;;

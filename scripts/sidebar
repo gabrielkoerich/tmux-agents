@@ -312,6 +312,20 @@ new_space() {
   tmux new-window -t "$(tmux display -p -c "$1" '#{session_name}'):" "$connect" "$2" ${3:+"$3"}
 }
 
+# x on a detached row ends that tmux session on its server, after a confirm. Closing a window never does,
+# since the session outliving its window is what keeps an agent running
+end_session() {
+  local target=${targets[sel]:-} host name
+  if [[ $target != attach:* ]]; then
+    return
+  fi
+
+  host=${target#attach:}
+  name=${host#*:}
+  host=${host%%:*}
+  tmux confirm-before -p "end $host session $name? (y/n)" "run-shell -b \"'$(cd "$(dirname "$0")" && pwd)/agents' end-session '$host' '$name'\""
+}
+
 activate() {
   local target=${targets[sel]:-} new=${1:-} kind name host= client
   kind=${target%%:*}
@@ -436,6 +450,7 @@ sidebar() {
       (k | $'\e[A') step -1 ;;
       ('') activate ;;
       (n) activate 1 ;;
+      (x) end_session ;;
       ($'\e' | $'\t') tmux last-pane ;;
       (q) exit 0 ;;
     esac

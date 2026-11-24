@@ -44,7 +44,7 @@ bind | run-shell "~/.tmux/plugins/tmux-agents/scripts/split h '#{pane_id}'"
 bind _ run-shell "~/.tmux/plugins/tmux-agents/scripts/split v '#{pane_id}'"
 ``` The sidebar names the space after the remote folder or the agent's task, and after the session when the title has neither.
 
-A session outlives its window too. Close the window, or restart the Mac, and the agent keeps running on the server. The watcher lists the tmux sessions on every machine in `@agents-hosts` each time it polls, and the sidebar shows the ones this Mac has no window on under their machine, as `↺ <folder> detached`, or `elsewhere` when another terminal has it. A click reattaches it in a new window with `connect <host> <session>`.
+A session outlives its window too. Close the window, or restart the Mac, and the agent keeps running on the server. The watcher lists the tmux sessions on every machine in `@agents-hosts` each time it polls, and the sidebar shows the ones this Mac has no window on under their machine, as `↺ <folder> detached`, or `elsewhere` when another terminal has it. A click reattaches it in a new window with `connect <host> <session>`. Closing a window never ends its session, so an agent keeps running; to end one, select its `↺` row and press `x`, which asks first and then runs `tmux kill-session` on the server.
 
 The same poll reads each machine's cpu and memory in use, both as a share of the machine, and its one minute load average, and the sidebar shows them on its row, `vps-us   3% 41% 0.10 ●`, so a server's tmux needs no status bar of its own in every pane. `scripts/host-probe.sh` goes to the server's `sh` on stdin, sessions and stats in one round trip, and reads `/proc` on Linux and `top`, `vm_stat` and `sysctl` on macOS. Only three numbers are kept, and a machine that stops answering shows none. Session names keep only `A-Za-z0-9_.-`, and folders and titles reach the screen as plain text.
 
@@ -160,6 +160,7 @@ The sidebar opens without taking focus. Click a row to go there, or scroll with 
 | `j` `k` or arrows | Move |
 | Enter | Go to the session or pane |
 | `n` | New window on that machine |
+| `x` | On a detached session, end it on the server, after a confirm |
 | Tab or Esc | Back to the previous pane |
 | `q` | Close |
 

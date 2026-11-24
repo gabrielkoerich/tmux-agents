@@ -143,3 +143,16 @@ teardown() {
   "$BATS_TEST_DIRNAME/../scripts/agents" roll-up
   [ "$(tmux show -qv -t work @agent_session_alert)" = done ]
 }
+
+@test "end-session kills only the named session on its server, and refuses an odd name" {
+  log="$BATS_TEST_TMPDIR/ssh.log"
+  printf '#!/bin/sh\ncat >/dev/null 2>&1 </dev/null\nprintf "%%s|" "$@" >> %s\necho >> %s\n' "$log" "$log" > "$BATS_TEST_TMPDIR/bin/ssh"
+  chmod +x "$BATS_TEST_TMPDIR/bin/ssh"
+  run "$BATS_TEST_DIRNAME/../scripts/agents" end-session box s-old
+  [ "$status" -eq 0 ]
+  [[ "$(head -1 "$log")" == *"|box|tmux kill-session -t '=s-old'|" ]]
+  : > "$log"
+  run "$BATS_TEST_DIRNAME/../scripts/agents" end-session box "x';rm -rf ~;'"
+  [ "$status" -eq 2 ]
+  [ ! -s "$log" ]
+}
