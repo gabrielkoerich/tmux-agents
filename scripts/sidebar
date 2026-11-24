@@ -364,7 +364,7 @@ follow() {
 }
 
 sidebar() {
-  local key rest i c b x y tty_saved
+  local key rest i c b x y tty_saved want
   export LC_ALL=${LC_ALL:-en_US.UTF-8}
   tmux set -p -t "$TMUX_PANE" @agent_sidebar 1
   # The alternate screen lets tmux pass the wheel through instead of entering copy mode
@@ -377,6 +377,12 @@ sidebar() {
   top=0
   last_frame=
   while true; do
+    # tmux shares space out again when a window's layout changes, so the sidebar sets its own width back
+    want=$(option @agents-sidebar-width 32)
+    if [[ $want =~ ^[0-9]+$ && $(tmux display -p -t "$TMUX_PANE" '#{pane_width}') != "$want" ]]; then
+      tmux resize-pane -t "$TMUX_PANE" -x "$want" 2>/dev/null
+    fi
+
     build
     if (( sel < 0 || sel >= ${#targets[@]} )) || [[ -z ${targets[sel]:-} ]]; then
       i=$sel
@@ -443,7 +449,7 @@ toggle() {
   if [[ -n $id ]]; then
     tmux kill-pane -t "$id"
   else
-    tmux split-window -d -t "$win" -hbf -l "$(v=$(tmux show -gqv @agents-sidebar-width); echo "${v:-32}")" "exec $0 sidebar"
+    tmux split-window -d -t "$win" -hbf -l "$(option @agents-sidebar-width 32)" "exec $0 sidebar"
   fi
 }
 
