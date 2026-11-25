@@ -132,6 +132,45 @@ teardown() {
   [[ $output != *"session:work|"* ]]
 }
 
+@test "this computer lists no windows or panes unless @agents-sidebar-panes is on" {
+  tmux split-window -d -t main
+  TMUX_PANE=$pane run "$bin" build
+  [[ $output != *"window:"* ]]
+  [[ $output != *"├"* ]]
+}
+
+@test "with @agents-sidebar-panes on, a split window lists its panes under it, leaving the sidebar out" {
+  tmux set -g @agents-sidebar-panes on
+  tmux rename-window -t main:0 editor
+  a=$(tmux split-window -d -P -F '#{pane_id}' -t main)
+  b=$(tmux split-window -d -P -F '#{pane_id}' -t main)
+  win=$(tmux display -p -t main '#{window_id}')
+  TMUX_PANE=$pane run "$bin" build
+  [[ $output == *"session:main|"*"window:$win|"*"editor"* ]]
+  [[ $(grep "^pane:$a|" <<<"$output" | head -1) == *[├└]* ]]
+  [[ $(grep "^pane:$b|" <<<"$output" | head -1) == *[├└]* ]]
+  [ "$(grep -c '└' <<<"$output")" -eq 1 ]
+  [[ $output != *"pane:$pane|"* ]]
+}
+
+@test "with @agents-sidebar-panes on, a window with one pane is a row that goes to that pane" {
+  tmux set -g @agents-sidebar-panes on
+  work=$(tmux display -p -t work '#{pane_id}')
+  TMUX_PANE=$pane run "$bin" build
+  [[ $output == *"session:work|"*"pane:$work|"* ]]
+  [[ $output != *"window:$(tmux display -p -t work '#{window_id}')|"* ]]
+}
+
+@test "with @agents-sidebar-panes on, the session with the latest activity comes first" {
+  tmux set -g @agents-sidebar-panes on
+  sleep 1
+  tmux new -d -s zzz -x 120 -y 40
+  TMUX_PANE=$pane run "$bin" build
+  zzz=$(grep -n '^session:zzz|' <<<"$output" | cut -d: -f1)
+  main=$(grep -n '^session:main|' <<<"$output" | cut -d: -f1)
+  [ -n "$zzz" ] && [ "$zzz" -lt "$main" ]
+}
+
 @test "a session's tab mark is the most urgent alert among its windows" {
   w1=$(tmux new-window -d -P -F '#{window_id}' -t work)
   w2=$(tmux new-window -d -P -F '#{window_id}' -t work)

@@ -157,6 +157,18 @@ Machines listed in `@agents-hosts` always show, with a grey ring until you conne
 set -g @agents-hosts 'legion m1-max'
 ``` The grey row is where you are, until you focus the sidebar and it becomes the cursor.
 
+With `@agents-sidebar-panes on`, this computer lists each session, its windows under it, and the panes of a split window under those, each pane with its agent's state and task or its command and folder. A window with one pane is a single row that goes to that pane. Sessions, windows and panes come in order of last activity, the most recent first, from tmux's `session_activity`, `window_activity` and `pane_last_output_time`:
+
+```
+ ▭ This computer          ●
+   W  work
+      0 zsh          Projects
+   M  main             main
+      0 editor
+        ├ zsh            orch
+        └ ⠿ Fix login    bean
+```
+
 The sidebar opens without taking focus. Click a row to go there, or scroll with the wheel. With the sidebar focused:
 
 | Key | Action |
@@ -220,6 +232,7 @@ The picker takes its fzf colours from `@agents-fzf-colors`, so a theme can set t
 | `@agents-pick-key` | `Space` | Picker key, after prefix |
 | `@agents-sidebar-key` | `a` | Sidebar key, after prefix |
 | `@agents-sidebar-width` | `32` | Sidebar width in cells |
+| `@agents-sidebar-panes` | `off` | `on` lists each window and pane under this computer, ordered by last activity |
 | `@agents-tree-width` | `40` | Width of the tree `scripts/tree` docks |
 | `@agents-hosts` | | Machines the sidebar always shows, in order |
 | `@agents-headless-sessions` | | Session globs that run a headless agent |

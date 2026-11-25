@@ -112,15 +112,29 @@ space_row() {
   add_row "  $badge"$'\e[1m'" $(tr '[:lower:]' '[:upper:]' <<<"${name:0:1}") "$'\e[22m'"$bg${c_name} $name$(spaces $(( nw - ${#name} ))) ${c_meta}$meta${c_fg} " "$target"
 }
 
-agent_row() {
-  local state=$1 since=$2 name=$3 detail=$4 target=$5 subs=${6:-} icon color when lw text
-  case $state in
+# Sets icon and color for an agent state
+state_mark() {
+  case $1 in
     (blocked) icon='!' color=$c_blocked ;;
     (asking) icon='?' color=$c_asking ;;
     (waiting) icon='●' color=$c_on ;;
     (working) icon='⠿' color=$c_working ;;
     (*) icon='○' color=$c_idle ;;
   esac
+}
+
+# A row nested under a space, indented, with a prefix such as a window index or a tree branch
+tree_row() {
+  local indent=$1 prefix=$2 plen=$3 name=$4 meta=$5 target=$6 nw
+  meta=$(fit "$meta" $(( width / 2 - 2 )))
+  nw=$(( width - indent - plen - ${#meta} - 2 ))
+  name=$(fit "$name" "$nw")
+  add_row "$(spaces "$indent")$prefix${c_name}$name$(spaces $(( nw - ${#name} ))) ${c_meta}$meta${c_fg} " "$target"
+}
+
+agent_row() {
+  local state=$1 since=$2 name=$3 detail=$4 target=$5 subs=${6:-} icon color when lw text
+  state_mark "$state"
   when=$(age "$since")
   # The subagents this Claude runs, from the watcher's count
   if [[ $subs =~ ^[1-9][0-9]*$ ]]; then
@@ -136,15 +150,112 @@ agent_row() {
   add_row "  $color$icon ${c_name}$name${c_meta}${text:${#name}}$(spaces $(( lw - ${#text} ))) $when${c_fg} " "$target"
 }
 
+# With @agents-sidebar-panes on, this computer lists each session, its windows, and the panes of a split
+# window. A window with one pane shows that pane's folder on its own row
+local_tree() {
+  local tabs=$1 my_sess=$2 i j k m n c s w first one last act br glyph icon color pre plen
+  local f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13
+  local -a L_sess L_win L_idx L_wname L_id L_path L_active L_pact L_state L_view L_label L_meta
+  n=0
+  while IFS=$sep read -r f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13; do
+    if [[ -z $f5 ]]; then
+      continue
+    fi
+
+    L_sess[n]=$f1 L_win[n]=$f2 L_idx[n]=$f3 L_wname[n]=$f4 L_id[n]=$f5 L_path[n]=$f7 L_active[n]=$f8
+    L_pact[n]=$f9 L_state[n]=$f10 L_view[n]=$f11 L_label[n]=$f12 L_meta[n]=$f13
+    n=$(( n + 1 ))
+  done <<<"$3"
+
+  i=0
+  while (( i < n )); do
+    s=${L_sess[i]}
+    j=$i
+    while (( j < n )) && [[ ${L_sess[j]} == "$s" ]]; do
+      j=$(( j + 1 ))
+    done
+
+    # With sessions as tabs, only the windows of the sidebar's own session show
+    if [[ $tabs == sessions && $s != "$my_sess" ]]; then
+      i=$j
+      continue
+    fi
+
+    if [[ $tabs != sessions ]]; then
+      br=
+      for (( k = i; k < j; k++ )); do
+        if [[ ${L_active[k]} == 1 ]]; then
+          br=$(git -C "${L_path[k]}" symbolic-ref --short HEAD 2>/dev/null)
+        fi
+      done
+      space_row "$s" "$br" "session:$s"
+    fi
+
+    k=$i
+    while (( k < j )); do
+      w=${L_win[k]}
+      first=$k
+      while (( k < j )) && [[ ${L_win[k]} == "$w" ]]; do
+        k=$(( k + 1 ))
+      done
+
+      c=0 one=$first act=$first
+      for (( m = first; m < k; m++ )); do
+        if [[ ${L_pact[m]} == 1 ]]; then
+          act=$m
+        fi
+
+        if [[ ${L_view[m]} != 1 ]]; then
+          c=$(( c + 1 ))
+          one=$m
+        fi
+      done
+      last=$one
+
+      if [[ $tabs == sessions ]]; then
+        space_row "${L_wname[first]}" "${L_idx[first]}" "pane:${L_id[act]}"
+      elif (( c == 1 )); then
+        tree_row 6 "${c_meta}${L_idx[first]} " $(( ${#L_idx[first]} + 1 )) "${L_wname[first]}" "${L_meta[one]}" "pane:${L_id[one]}"
+      else
+        tree_row 6 "${c_meta}${L_idx[first]} " $(( ${#L_idx[first]} + 1 )) "${L_wname[first]}" "" "window:$w"
+      fi
+
+      if (( c > 1 )); then
+        for (( m = first; m < k; m++ )); do
+          if [[ ${L_view[m]} == 1 ]]; then
+            continue
+          fi
+
+          glyph='├'
+          if (( m == last )); then
+            glyph='└'
+          fi
+
+          pre="${c_meta}$glyph "
+          plen=2
+          if [[ -n ${L_state[m]} ]]; then
+            state_mark "${L_state[m]}"
+            pre+="$color$icon "
+            plen=4
+          fi
+          tree_row 8 "$pre" "$plen" "${L_label[m]}" "${L_meta[m]}" "pane:${L_id[m]}"
+        done
+      fi
+    done
+    i=$j
+  done
+}
+
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
+  local show_panes locals= view plabel pmeta
   local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t open rs all_remote pact tabs my_sess subs
   rows=() targets=()
   load_palette
   now=$(date +%s)
   local_host=$(tmux display -p "#{host}")
   width=$(tmux display -p -t "$TMUX_PANE" '#{pane_width}')
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{pane_active}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@agents_tree}$sep#{@agent_subagents}$sep#{pane_title}")
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{pane_active}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@agents_tree}$sep#{@agent_subagents}$sep#{session_activity}$sep#{window_activity}$sep#{pane_last_output_time}$sep#{pane_index}$sep#{pane_title}")
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
@@ -155,7 +266,8 @@ build() {
   tabs=$(tmux show -gqv @agents-tabs)
   my_sess=$(tmux display -p -t "$TMUX_PANE" '#{session_name}')
   headless=$(v=$(tmux show -gqv @agents-headless-sessions); echo "$v")
-  while IFS=$sep read -r id pid cmd sess win path active pact state since wname idx rsess shost suser tree subs title; do
+  show_panes=$(option @agents-sidebar-panes off)
+  while IFS=$sep read -r id pid cmd sess win path active pact state since wname idx rsess shost suser tree subs sact wact pout pidx title; do
     title=$(plain "$title")
     wname=$(plain "$wname")
     if [[ -n $headless ]] && headless_session "$sess" "$headless"; then
@@ -166,8 +278,24 @@ build() {
       continue
     fi
 
+    if [[ $show_panes == on ]]; then
+      view=0
+      if [[ $id == "$TMUX_PANE" || -n $tree ]]; then
+        view=1
+      fi
+
+      plabel=$cmd
+      pmeta=${path##*/}
+      if agent_title "$title"; then
+        plabel=$(clean_title "$title")
+      elif [[ $cmd =~ $ssh_cmds ]]; then
+        plabel=${shost:-ssh}
+        pmeta=ssh
+      fi
+      # Sort keys first: the session, window and pane with the latest activity lead
+      locals+="${sact:-0}$sep$sess$sep${wact:-0}$sep$win$sep${pout:-0}$sep$pidx$sep$sess$sep$win$sep$idx$sep$wname$sep$id$sep$cmd$sep$path$sep$active$sep$pact$sep$state$sep$view$sep$plabel$sep$pmeta"$'\n'
     # With sessions as tabs, this computer lists the windows of the session the sidebar is in
-    if [[ $tabs == sessions ]]; then
+    elif [[ $tabs == sessions ]]; then
       if [[ $pact == 1 && $sess == "$my_sess" ]]; then
         space_row "$wname" "$idx" "pane:$id"
       fi
@@ -211,6 +339,10 @@ build() {
       agents+="$state$sep$since$sep$name$sep$(clean_title "$title")$sep$id$sep$subs"$'\n'
     fi
   done <<<"$panes"
+
+  if [[ $show_panes == on ]]; then
+    local_tree "$tabs" "$my_sess" "$(printf '%s' "$locals" | sort -t "$sep" -k1,1nr -k2,2 -k3,3nr -k4,4 -k5,5nr -k6,6n | cut -d "$sep" -f7-)"
+  fi
 
   # Every pane's session counts as open here, splits included, before the list keeps one space per window
   all_remote=$remote
@@ -345,6 +477,7 @@ activate() {
   client=$(tmux list-clients -t "$(tmux display -p -t "$TMUX_PANE" '#{session_id}')" -F '#{client_activity} #{client_name}' | sort -rn | head -1 | cut -d' ' -f2)
   case $kind:$new in
     (session:) tmux switch-client -c "$client" -t "=$name" ;;
+    (window:) tmux switch-client -c "$client" -t "$name" \; select-window -t "$name" ;;
     (pane:) tmux switch-client -c "$client" -t "$name" \; select-window -t "$name" \; select-pane -t "$name" ;;
     (host:*) new_space "$client" "$name" ;;
     (attach:*) new_space "$client" "${name%%:*}" "${name#*:}" ;;
