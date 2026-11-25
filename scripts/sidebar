@@ -153,7 +153,7 @@ agent_row() {
 # With @agents-sidebar-panes on, this computer lists each session, its windows, and the panes of a split
 # window. A window with one pane shows that pane's folder on its own row
 local_tree() {
-  local tabs=$1 my_sess=$2 i j k m n c s w first one last act br glyph icon color pre plen
+  local tabs=$1 my_sess=$2 i j k m n c s w first one last act br glyph icon color pre plen pin
   local f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13
   local -a L_sess L_win L_idx L_wname L_id L_path L_active L_pact L_state L_view L_label L_meta
   n=0
@@ -215,9 +215,9 @@ local_tree() {
       if [[ $tabs == sessions ]]; then
         space_row "${L_wname[first]}" "${L_idx[first]}" "pane:${L_id[act]}"
       elif (( c == 1 )); then
-        tree_row 6 "${c_meta}${L_idx[first]} " $(( ${#L_idx[first]} + 1 )) "${L_wname[first]}" "${L_meta[one]}" "pane:${L_id[one]}"
+        tree_row 4 "${c_meta}${L_idx[first]} " $(( ${#L_idx[first]} + 1 )) "${L_wname[first]}" "${L_meta[one]}" "pane:${L_id[one]}"
       else
-        tree_row 6 "${c_meta}${L_idx[first]} " $(( ${#L_idx[first]} + 1 )) "${L_wname[first]}" "" "window:$w"
+        tree_row 4 "${c_meta}${L_idx[first]} " $(( ${#L_idx[first]} + 1 )) "${L_wname[first]}" "" "window:$w"
       fi
 
       if (( c > 1 )); then
@@ -238,7 +238,12 @@ local_tree() {
             pre+="$color$icon "
             plen=4
           fi
-          tree_row 8 "$pre" "$plen" "${L_label[m]}" "${L_meta[m]}" "pane:${L_id[m]}"
+          # Panes sit under the badge letter with sessions as tabs, one step under the window row otherwise
+          pin=6
+          if [[ $tabs == sessions ]]; then
+            pin=4
+          fi
+          tree_row "$pin" "$pre" "$plen" "${L_label[m]}" "${L_meta[m]}" "pane:${L_id[m]}"
         done
       fi
     done
@@ -288,7 +293,8 @@ build() {
       pmeta=${path##*/}
       if agent_title "$title"; then
         plabel=$(clean_title "$title")
-      elif [[ $cmd =~ $ssh_cmds ]]; then
+      # A pane connect opened runs ssh under bash, so its session marks it as on a server too
+      elif [[ $cmd =~ $ssh_cmds || -n $rsess ]]; then
         plabel=${shost:-ssh}
         pmeta=ssh
       fi

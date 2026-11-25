@@ -197,3 +197,12 @@ teardown() {
   [ "$status" -eq 2 ]
   [ ! -s "$log" ]
 }
+
+@test "in the pane tree, a pane on a server reads as its host, also one connect opened" {
+  tmux set -g @agents-sidebar-panes on
+  tmux split-window -d -t main
+  remote=$(tmux split-window -d -P -F '#{pane_id}' -t main)
+  tmux set -p -t "$remote" @remote_session s1 \; set -p -t "$remote" @ssh_host box
+  TMUX_PANE=$pane run "$bin" build
+  [[ $output == *"pane:$remote|"*"box"*"ssh"* ]]
+}
