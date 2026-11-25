@@ -161,14 +161,16 @@ teardown() {
   [[ $output != *"window:$(tmux display -p -t work '#{window_id}')|"* ]]
 }
 
-@test "with @agents-sidebar-panes on, the session with the latest activity comes first" {
-  tmux set -g @agents-sidebar-panes on
-  sleep 1
-  tmux new -d -s zzz -x 120 -y 40
-  TMUX_PANE=$pane run "$bin" build
-  zzz=$(grep -n '^session:zzz|' <<<"$output" | cut -d: -f1)
-  main=$(grep -n '^session:main|' <<<"$output" | cut -d: -f1)
-  [ -n "$zzz" ] && [ "$zzz" -lt "$main" ]
+@test "sessions come in index order, like the tabs and the number keys, with or without panes" {
+  tmux new -d -s aaa -x 120 -y 40
+  for mode in off on; do
+    tmux set -g @agents-sidebar-panes "$mode"
+    TMUX_PANE=$pane run "$bin" build
+    main=$(grep -n '^session:main|' <<<"$output" | cut -d: -f1)
+    work=$(grep -n '^session:work|' <<<"$output" | cut -d: -f1)
+    aaa=$(grep -n '^session:aaa|' <<<"$output" | cut -d: -f1)
+    [ -n "$aaa" ] && [ "$main" -lt "$work" ] && [ "$work" -lt "$aaa" ]
+  done
 }
 
 @test "a session's tab mark is the most urgent alert among its windows" {

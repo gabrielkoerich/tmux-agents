@@ -248,14 +248,14 @@ local_tree() {
 
 build() {
   local panes ps_out id pid cmd sess win path active state since wname title host name m n
-  local show_panes locals= view plabel pmeta
+  local show_panes locals= view plabel pmeta sess_rows=
   local remote= agents= hosts s idx local_host headless p rsess shost suser tree services t open rs all_remote pact tabs my_sess subs
   rows=() targets=()
   load_palette
   now=$(date +%s)
   local_host=$(tmux display -p "#{host}")
   width=$(tmux display -p -t "$TMUX_PANE" '#{pane_width}')
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{pane_active}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@agents_tree}$sep#{@agent_subagents}$sep#{session_activity}$sep#{window_activity}$sep#{pane_last_output_time}$sep#{pane_index}$sep#{pane_title}")
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}$sep#{session_name}$sep#{window_id}$sep#{pane_current_path}$sep#{&&:#{window_active},#{pane_active}}$sep#{pane_active}$sep#{@agent_state}$sep#{@agent_since}$sep#{window_name}$sep#{window_index}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{@agents_tree}$sep#{@agent_subagents}$sep#{session_id}$sep#{window_index}$sep#{pane_index}$sep#{pane_index}$sep#{pane_title}")
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
@@ -292,15 +292,16 @@ build() {
         plabel=${shost:-ssh}
         pmeta=ssh
       fi
-      # Sort keys first: the session, window and pane with the latest activity lead
-      locals+="${sact:-0}$sep$sess$sep${wact:-0}$sep$win$sep${pout:-0}$sep$pidx$sep$sess$sep$win$sep$idx$sep$wname$sep$id$sep$cmd$sep$path$sep$active$sep$pact$sep$state$sep$view$sep$plabel$sep$pmeta"$'\n'
+      # Sort keys first: session, window and pane by index, the order the tabs and the number keys use
+      locals+="${sact#\$}$sep$sess$sep${wact:-0}$sep$win$sep${pout:-0}$sep$pidx$sep$sess$sep$win$sep$idx$sep$wname$sep$id$sep$cmd$sep$path$sep$active$sep$pact$sep$state$sep$view$sep$plabel$sep$pmeta"$'\n'
     # With sessions as tabs, this computer lists the windows of the session the sidebar is in
     elif [[ $tabs == sessions ]]; then
       if [[ $pact == 1 && $sess == "$my_sess" ]]; then
         space_row "$wname" "$idx" "pane:$id"
       fi
     elif [[ $active == 1 ]]; then
-      space_row "$sess" "$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)" "session:$sess"
+      # tmux lists sessions by name, the tabs and number keys count them by index, so these are sorted below
+      sess_rows+="${sact#\$}$sep$sess$sep$(git -C "$path" symbolic-ref --short HEAD 2>/dev/null)"$'\n'
     fi
 
     # Itself and a tree pane are views, not spaces
@@ -340,8 +341,14 @@ build() {
     fi
   done <<<"$panes"
 
+  while IFS=$sep read -r _ s p; do
+    if [[ -n $s ]]; then
+      space_row "$s" "$p" "session:$s"
+    fi
+  done < <(printf '%s' "$sess_rows" | sort -t "$sep" -k1,1n)
+
   if [[ $show_panes == on ]]; then
-    local_tree "$tabs" "$my_sess" "$(printf '%s' "$locals" | sort -t "$sep" -k1,1nr -k2,2 -k3,3nr -k4,4 -k5,5nr -k6,6n | cut -d "$sep" -f7-)"
+    local_tree "$tabs" "$my_sess" "$(printf '%s' "$locals" | sort -t "$sep" -k1,1n -k2,2 -k3,3n -k4,4 -k5,5n -k6,6n | cut -d "$sep" -f7-)"
   fi
 
   # Every pane's session counts as open here, splits included, before the list keeps one space per window
