@@ -3,6 +3,8 @@
 # Each test gets its own tmux server, with no config so no watcher runs, and its socket in the test's own
 # folder, which bats removes, so a run leaves no socket behind in the shared tmux folder
 setup() {
+  # Poll results go to files, so each test keeps them in its own folder
+  export XDG_STATE_HOME="$BATS_TEST_TMPDIR/state"
   bin="$BATS_TEST_DIRNAME/../scripts/sidebar"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
   printf '#!/bin/sh\nexec %s -S %s/tmux.sock -f /dev/null "$@"\n' "$(command -v tmux)" "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/bin/tmux"
@@ -119,7 +121,7 @@ teardown() {
   TMUX_PANE=$pane run "$bin" build
   [[ $output == *"host:box|"*"12% 45% 0.30"* ]]
   STATS="$(printf '9|1|1\033]52;c;eA==\007')" "$BATS_TEST_DIRNAME/../scripts/agents" poll-sessions
-  [ -z "$(tmux show -gqv @agents_stats_box)" ]
+  [ ! -e "$XDG_STATE_HOME/tmux-agents/stats_box" ]
 }
 
 @test "with sessions as tabs, this computer lists the windows of the sidebar's session" {

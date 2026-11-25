@@ -57,7 +57,7 @@ machine_row() {
 
   if [[ -n $target ]]; then
     key=$(printf '%s' "${target#host:}" | tr -c 'A-Za-z0-9_' '_')
-    IFS='|' read -r cpu mem load <<<"$(tmux show -gqv "@agents_stats_$key")"
+    IFS='|' read -r cpu mem load <<<"$(state_read "stats_$key")"
     if [[ -n ${cpu:-} ]]; then
       stats="$cpu% $mem% $load "
     fi
@@ -91,7 +91,7 @@ detached_rows() {
 
     label=$(fit "${label:-$name}" $(( width - 7 - ${#meta} - 1 )))
     add_row "   ${c_meta}↺  ${c_name}$label$(spaces $(( width - 7 - ${#meta} - 1 - ${#label} ))) ${c_meta}$meta${c_fg} " "attach:$host:$name"
-  done <<<"$(tmux show -gqv "@agents_remote_$key")"
+  done <<<"$(state_read "remote_$key")"
 }
 
 new_row() {
@@ -385,7 +385,7 @@ build() {
   read -r -a services <<<"$(tmux show -gqv @agents-services)"
   for s in ${services[@]+"${services[@]}"}; do
     p=$(printf '%s_%s' "${s%%:*}" "${s#*:}" | tr -c 'A-Za-z0-9_' '_')
-    IFS=$sep read -r state since detail <<<"$(tmux show -gqv "@agents_svc_$p")"
+    IFS=$sep read -r state since detail <<<"$(state_read "svc_$p")"
     if [[ -n $state ]]; then
       detail=$(plain "$detail")
       agents+="$state$sep$since$sep${s%%:*}$sep${s#*:}${detail:+ · $detail}${sep}host:${s%%:*}"$'\n'

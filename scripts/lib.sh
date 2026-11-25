@@ -148,3 +148,30 @@ option() {
   v=$(tmux show -gqv "$1")
   echo "${v:-$2}"
 }
+
+# Poll results live in files, not tmux options, since tmux redraws every attached client after any
+# set-option, and a value that changes each minute would flash the whole screen each minute
+state_dir() {
+  printf '%s' "${XDG_STATE_HOME:-$HOME/.local/state}/tmux-agents"
+}
+
+state_read() {
+  cat "$(state_dir)/$1" 2>/dev/null
+}
+
+# Writes a value in one rename, and not at all when it is unchanged
+state_write() {
+  local d f tmp
+  d=$(state_dir)
+  f=$d/$1
+  mkdir -p "$d"
+  if [[ -f $f && "$(cat "$f")" == "$2" ]]; then
+    return
+  fi
+
+  tmp=$(mktemp "$f.XXXXXX") && printf '%s' "$2" >"$tmp" && mv -f "$tmp" "$f"
+}
+
+state_clear() {
+  rm -f "$(state_dir)/$1"
+}

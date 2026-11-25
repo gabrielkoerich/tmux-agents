@@ -1,6 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
+  # Poll results go to files, so each test keeps them in its own folder
+  export XDG_STATE_HOME="$BATS_TEST_TMPDIR/state"
   bin="$BATS_TEST_DIRNAME/../scripts/agents"
   fx="$BATS_TEST_DIRNAME/fixtures"
 }

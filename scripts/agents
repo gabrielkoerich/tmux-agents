@@ -317,7 +317,7 @@ subagents_in() {
   find "$dir" -path '*/subagents/agent-*.jsonl' -mmin -2 2>/dev/null | wc -l | tr -d ' '
 }
 
-# Polls every host:service in @agents-services and keeps each one's state in @agents_svc_<host>_<service>
+# Polls every host:service in @agents-services and keeps each one's state in the state file svc_<host>_<service>
 poll_services() {
   local entry entries host name key state detail prev since now
   read -r -a entries <<<"$(option @agents-services '')"
@@ -331,7 +331,7 @@ poll_services() {
     esac
 
     key=$(printf '%s_%s' "$host" "$name" | tr -c 'A-Za-z0-9_' '_')
-    IFS=$sep read -r prev since _ <<<"$(tmux show -gqv "@agents_svc_$key")"
+    IFS=$sep read -r prev since _ <<<"$(state_read "svc_$key")"
     now=$(date +%s)
     if [[ $state != "${prev:-}" ]]; then
       since=$now
@@ -341,11 +341,11 @@ poll_services() {
         notify "$host · $name" "finished" ""
       fi
     fi
-    tmux set -g "@agents_svc_$key" "$state$sep${since:-$now}$sep$detail"
+    state_write "svc_$key" "$state$sep${since:-$now}$sep$detail"
   done
 }
 
-# Lists the tmux sessions on every pinned machine in @agents_remote_<host>, a line each: name, clients
+# Lists the tmux sessions on every pinned machine in the state file remote_<host>, a line each: name, clients
 # attached, the active pane's folder and title. All of it comes from the server, so it is kept as plain text
 poll_sessions() {
   local host hosts key raw line name att path title out stats probe
@@ -357,16 +357,16 @@ poll_sessions() {
     raw=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" 'sh -s' <"$probe" 2>/dev/null)
     # 255 is ssh failing to reach the host, so keep the sessions known and drop the stats, which would be stale
     if [[ $? -eq 255 ]]; then
-      tmux set -gu "@agents_stats_$key"
+      state_clear "stats_$key"
       continue
     fi
 
     # The stats come from the server too, so they are stored only when they are three numbers
     stats=$(sed -n '/^--stats--$/{n;p;}' <<<"$raw")
     if [[ $stats =~ ^[0-9]{1,3}\|[0-9]{1,3}\|[0-9]+(\.[0-9]+)?$ ]]; then
-      tmux set -g "@agents_stats_$key" "$stats"
+      state_write "stats_$key" "$stats"
     else
-      tmux set -gu "@agents_stats_$key"
+      state_clear "stats_$key"
     fi
 
     raw=$(sed '/^--stats--$/,$d' <<<"$raw")
@@ -377,7 +377,7 @@ poll_sessions() {
         out+="$name$sep$(plain "$att")$sep$(plain "$path")$sep$(plain "$title")"$'\n'
       fi
     done <<<"$raw"
-    tmux set -g "@agents_remote_$key" "$out"
+    state_write "remote_$key" "$out"
   done
 }
 
@@ -453,7 +453,7 @@ pick() {
       read -r -a entries <<<"$(option @agents-services '')"
       for entry in ${entries[@]+"${entries[@]}"}; do
         key=$(printf '%s_%s' "${entry%%:*}" "${entry#*:}" | tr -c 'A-Za-z0-9_' '_')
-        IFS=$sep read -r state _ detail <<<"$(tmux show -gqv "@agents_svc_$key")"
+        IFS=$sep read -r state _ detail <<<"$(state_read "svc_$key")"
         case $state in
           (blocked) icon="${c_blocked}!" ;;
           (working) icon="${c_working}⠿" ;;
