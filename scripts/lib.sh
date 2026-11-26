@@ -175,3 +175,27 @@ state_write() {
 state_clear() {
   rm -f "$(state_dir)/$1"
 }
+
+# Prints an OSC 7577 report telling the terminal how to start this program again, or with --clear that it should
+# not. Nothing without the terminal's token, and the owner is the calling script
+resume_report() {
+  local body argv='' a mac
+  if [[ -z ${OSC7577_TOKEN:-} ]]; then
+    return 0
+  fi
+
+  if [[ $1 == --clear ]]; then
+    body="pid=$$:time=$(date +%s):clear=1"
+  else
+    for a in "$@"; do
+      argv+="${argv:+,}$(printf '%s' "$a" | base64 | tr -d '\n')"
+    done
+    body="pid=$$:time=$(date +%s):argv=$argv"
+  fi
+  if command -v sha256sum >/dev/null; then
+    mac=$(printf '%s:%s' "$body" "$OSC7577_TOKEN" | sha256sum | cut -d' ' -f1)
+  else
+    mac=$(printf '%s:%s' "$body" "$OSC7577_TOKEN" | shasum -a 256 | cut -d' ' -f1)
+  fi
+  printf '\033]7577;%s:mac=%s\033\134' "$body" "$mac"
+}

@@ -75,3 +75,28 @@ claude_pane() {
   tmux capture-pane -p -t "main:$odd" | grep -q 'claude --resume$'
   [ ! -e "$BATS_TEST_TMPDIR/pwned" ]
 }
+
+@test "a pane whose program reported itself through OSC 7577 is left to tmux-osc-7577" {
+  transcript 11111111-2222-3333-4444-555555555555 "Fix login"
+  claude_pane "Fix login"
+  pane=$(tmux list-panes -a -F '#{pane_id} #{pane_current_command}' | awk '$2 == "claude" { print $1; exit }')
+  rec="$XDG_STATE_HOME/tmux-osc-7577/server-$(tmux display -p '#{pid}-#{start_time}')/records"
+  mkdir -p "$rec"
+  : >"$rec/${pane#%}.$$"
+  "$bin" save
+  ! grep -q 'claude' "$XDG_STATE_HOME/tmux-agents/resume"
+}
+
+@test "resume_report signs its body with the token the way OSC 7577 says, and sends nothing without one" {
+  lib="$BATS_TEST_DIRNAME/../scripts/lib.sh"
+  [ -z "$(OSC7577_TOKEN= bash -c "source '$lib'; resume_report /bin/x")" ]
+  seq=$(OSC7577_TOKEN=tok-tok-tok-tok-tok-tok-tok bash -c "source '$lib'; resume_report /bin/x 'a b'")
+  [ "${seq:0:7}" = $'\033]7577;' ]
+  [ "${seq: -2}" = $'\033\\' ]
+  body=${seq#*7577;}
+  body=${body%%:mac=*}
+  mac=${seq#*:mac=}
+  mac=${mac:0:64}
+  [ "$(printf '%s:%s' "$body" tok-tok-tok-tok-tok-tok-tok | shasum -a 256 | cut -d' ' -f1)" = "$mac" ]
+  [[ $body == *":argv=L2Jpbi94,YSBi" ]]
+}

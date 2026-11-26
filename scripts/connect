@@ -15,6 +15,11 @@ if [[ -n ${TMUX_PANE:-} ]]; then
   tmux set -p -t "$TMUX_PANE" @remote_session "$name" \; set -p -t "$TMUX_PANE" @ssh_host "${host#*@}" \; set -p -t "$TMUX_PANE" @ssh_user "$(ssh_user_of "$host")"
 fi
 
+# With OSC 7577 the terminal starts this again after a restart, back into the same session. The token stays
+# out of what ssh and its children inherit
+resume_report "$(cd "$(dirname "$0")" && pwd)/connect" "$host" "$name" 2>/dev/null >/dev/tty
+export -n OSC7577_TOKEN 2>/dev/null
+
 # A folder from the pane it splits, so the new session starts where that one is
 remote="$(remote_cd "${3:-}")tmux new -A -s '$name'"
 
@@ -27,12 +32,14 @@ while true; do
 
   # 0 is a detach or the session ending, which is on purpose
   if [[ $code -eq 0 ]]; then
+    resume_report --clear 2>/dev/null >/dev/tty
     exit 0
   fi
 
   # The server has no tmux, so settle for a plain shell that a drop will end
   if [[ $code -eq 127 ]]; then
     printf '\ntmux is not installed on %s, opening a plain shell\n' "$host"
+    resume_report --clear 2>/dev/null >/dev/tty
     exec ssh "$host"
   fi
 

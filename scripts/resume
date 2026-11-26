@@ -64,10 +64,31 @@ opencode_session() {
   fi
 }
 
+# tmux-osc-7577's records for this server, when it is installed: a program that reported itself is its job
+osc_records() {
+  printf '%s/tmux-osc-7577/server-%s/records' "${XDG_STATE_HOME:-$HOME/.local/state}" "$(tmux display -p '#{pid}-#{start_time}')"
+}
+
+# A pane whose program reported itself through OSC 7577 and still runs
+reported() {
+  local f
+  for f in "$1/${2#%}".*; do
+    if [[ -f $f ]] && kill -0 "${f##*.}" 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # One line a pane: session, window index, pane index, kind, and the session id or the ssh target and session
 save() {
-  local sess widx pidx cmd path rsess host user title kind id out='' dup
-  while IFS=$sep read -r sess widx pidx cmd path rsess host user title; do
+  local sess widx pidx cmd path rsess host user title kind id out='' dup pane osc
+  osc=$(osc_records)
+  while IFS=$sep read -r pane sess widx pidx cmd path rsess host user title; do
+    if reported "$osc" "$pane"; then
+      continue
+    fi
+
     title=$(clean_title "$title")
 
     case $cmd in
@@ -83,7 +104,7 @@ save() {
         ;;
     esac
     out+="$sess$sep$widx$sep$pidx$sep$kind$sep$id"$'\n'
-  done < <(tmux list-panes -a -F "#{session_name}$sep#{window_index}$sep#{pane_index}$sep#{pane_current_command}$sep#{pane_current_path}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{pane_title}")
+  done < <(tmux list-panes -a -F "#{pane_id}$sep#{session_name}$sep#{window_index}$sep#{pane_index}$sep#{pane_current_command}$sep#{pane_current_path}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{pane_title}")
 
   # A session two panes would both resume goes to the picker for both
   for dup in $(printf '%s' "$out" | awk -F "$sep" '$4 != "connect" && $5 != "" { n[$4 FS $5]++ } END { for (k in n) if (n[k] > 1) { split(k, p, FS); print p[2] } }'); do
@@ -127,16 +148,27 @@ command_for() {
   esac
 }
 
-# Types each command into the pane resurrect recreated, only where that pane holds a plain shell
+# The panes that exist before resurrect restores, which restore leaves alone
+before() {
+  state_write resume-before "$(tmux list-panes -a -F '#{pane_id}' | tr '\n' ' ')"
+}
+
+# Types each command into a pane this restore made, only where its own shell is in front with no job, run by
+# this user. The saved set is used once, so a manual restore later types nothing into live shells
 restore() {
-  local sess widx pidx kind id pane cmd line
+  local sess widx pidx kind id pane line old pid cur
+  old=" $(state_read resume-before) "
   while IFS=$sep read -r sess widx pidx kind id; do
     if [[ -z $sess ]]; then
       continue
     fi
 
-    pane="=$sess:$widx.$pidx"
-    if [[ ! $(tmux display -p -t "$pane" '#{pane_current_command}' 2>/dev/null) =~ $shells ]]; then
+    IFS=$sep read -r pane pid cur < <(tmux display -p -t "=$sess:$widx.$pidx" "#{pane_id}$sep#{pane_pid}$sep#{pane_current_command}" 2>/dev/null)
+    if [[ -z $pane || $old == *" $pane "* || ! $cur =~ $shells ]]; then
+      continue
+    fi
+
+    if [[ $(ps -o tpgid= -p "$pid" | tr -d ' ') != "$pid" || $(ps -o uid= -p "$pid" | tr -d ' ') != "$EUID" ]]; then
       continue
     fi
 
@@ -145,10 +177,12 @@ restore() {
       tmux send-keys -t "$pane" -l "$line" \; send-keys -t "$pane" Enter
     fi
   done <<<"$(state_read resume)"
+  state_clear resume
 }
 
 case ${1:-} in
   (save) save ;;
+  (before) before ;;
   (restore) restore ;;
-  (*) echo "usage: resume save|restore" >&2; exit 2 ;;
+  (*) echo "usage: resume save|before|restore" >&2; exit 2 ;;
 esac
