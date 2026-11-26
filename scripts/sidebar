@@ -487,7 +487,7 @@ activate() {
   # A click focuses the sidebar, give focus back so it shows where you are again
   tmux last-pane -t "$TMUX_PANE" 2>/dev/null
   # With several terminals attached, switch the one looking at this sidebar, the most recently used
-  client=$(tmux list-clients -t "$(tmux display -p -t "$TMUX_PANE" '#{session_id}')" -F '#{client_activity} #{client_name}' | sort -rn | head -1 | cut -d' ' -f2)
+  client=$(tmux list-clients -t "$(tmux display -p -t "$TMUX_PANE" '#{session_id}')" -F '#{?client_control_mode,,#{client_activity} #{client_name}}' | sort -rn | head -1 | cut -d' ' -f2)
   case $kind:$new in
     (session:) tmux switch-client -c "$client" -t "=$name" ;;
     (window:) tmux switch-client -c "$client" -t "$name" \; select-window -t "$name" ;;
@@ -528,7 +528,7 @@ follow() {
 }
 
 sidebar() {
-  local key rest i c b x y tty_saved want
+  local key rest i c b x y tty_saved want looked
   export LC_ALL=${LC_ALL:-en_US.UTF-8}
   tmux set -p -t "$TMUX_PANE" @agent_sidebar 1
   # The alternate screen lets tmux pass the wheel through instead of entering copy mode
@@ -542,7 +542,9 @@ sidebar() {
   last_frame=
   while true; do
     # A sidebar in a window nobody is looking at does nothing but check again, each costs about 1.5% cpu awake
-    if [[ $(tmux display -p -t "$TMUX_PANE" '#{&&:#{window_active},#{session_attached}}') != 1 ]]; then
+    # The window's session when it is active, then the session of each client that is not a control client
+    IFS=$'\n' read -r -d '' -a looked < <(tmux display -p -t "$TMUX_PANE" '#{?window_active,#{session_id},-}' \; list-clients -F '#{?client_control_mode,,#{session_id}}')
+    if [[ " ${looked[*]:1} " != *" ${looked[0]:--} "* ]]; then
       last_frame=
       IFS= read -rsn1 -t 2 key || true
       continue

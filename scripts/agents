@@ -129,7 +129,7 @@ notify() {
   # terminal-notifier needs its own permission, so a refusal falls back to a plain notification
   if command -v terminal-notifier >/dev/null; then
     tmux_bin=$(command -v tmux)
-    jump="c=\$($tmux_bin list-clients -F '#{client_activity} #{client_name}' | sort -rn | head -1 | cut -d' ' -f2); $tmux_bin switch-client -c \"\$c\" -t '$3' \\; select-window -t '$3' \\; select-pane -t '$3'"
+    jump="c=\$($tmux_bin list-clients -F '#{?client_control_mode,,#{client_activity} #{client_name}}' | sort -rn | head -1 | cut -d' ' -f2); $tmux_bin switch-client -c \"\$c\" -t '$3' \\; select-window -t '$3' \\; select-pane -t '$3'"
     # A service has no pane to jump to, so its notification only brings the terminal forward
     local click=(-activate "$(option @agents-notify-app com.mitchellh.ghostty)")
     if [[ -n ${3:-} ]]; then
@@ -149,16 +149,24 @@ notify() {
 }
 
 scan() {
-  local panes id win cmd prev cur visible place pss pid host rsess remote since subs path found title state alert headless idle_after now ps_out=
-  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{window_id}$sep#{pane_current_command}$sep#{@agent_state}$sep#{@agent_alert}$sep#{&&:#{window_active},#{session_attached}}$sep#{session_name}:#{window_index}$sep#{pane_program_status_states}$sep#{pane_pid}$sep#{@ssh_host}$sep#{@remote_session}$sep#{@agent_since}$sep#{@agent_subagents}$sep#{pane_current_path}$sep#{pane_title}") || exit 0
+  local watched panes id win cmd prev cur visible place pss pid host rsess remote since subs path found title state alert headless idle_after now ps_out=
+  panes=$(tmux list-panes -a -F "#{pane_id}$sep#{window_id}$sep#{pane_current_command}$sep#{@agent_state}$sep#{@agent_alert}$sep#{?window_active,#{session_id},}$sep#{session_name}:#{window_index}$sep#{pane_program_status_states}$sep#{pane_pid}$sep#{@ssh_host}$sep#{@remote_session}$sep#{@agent_since}$sep#{@agent_subagents}$sep#{pane_current_path}$sep#{pane_title}") || exit 0
   if grep -Eq "$sep(ssh|mosh-client)$sep" <<<"$panes"; then
     ps_out=$(ps -A -o pid=,ppid=,args=)
   fi
 
+  # A control client, like a listener another plugin keeps attached, is nobody looking at the session
+  watched=" $(tmux list-clients -F '#{?client_control_mode,,#{session_id}}' | tr '\n' ' ') "
   headless=$(option @agents-headless-sessions '')
   idle_after=$(option @agents-idle-after 600)
   now=$(date +%s)
   while IFS=$sep read -r id win cmd prev cur visible place pss pid host rsess since subs path title; do
+    if [[ -n $visible && $watched == *" $visible "* ]]; then
+      visible=1
+    else
+      visible=0
+    fi
+
     # A pane connect opened runs ssh under a bash loop, so tmux reports bash, and connect sets the host itself
     remote=
     if [[ $cmd =~ $ssh_cmds || -n $rsess ]]; then
