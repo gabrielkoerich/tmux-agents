@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# Brings agents back after a tmux restart. On tmux-resurrect's save it notes which session each agent pane
+# had, and after resurrect's restore it starts that agent again in the pane: the exact session when only one
+# can be it, the agent's own session picker when it is not sure, so two panes never get the same session
+set -u
+dir=$(cd "$(dirname "$0")" && pwd)
+source "$dir/lib.sh"
+
+shells='^(zsh|bash|fish|sh|dash|ksh)$'
+uuid_re='^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'
+
+# The Claude session in this folder whose latest title is the pane's title, when exactly one matches. Claude
+# writes the title to the terminal and to the transcript as an ai-title or a custom-title line
+claude_session() {
+  local proj f last id='' n=0
+  proj="$HOME/.claude/projects/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  if [[ ! -d $proj || -z $2 ]]; then
+    return 0
+  fi
+
+  while IFS= read -r f; do
+    last=$(grep -E '"type":"(ai|custom)-title"' "$f" 2>/dev/null | tail -1 | jq -r '.customTitle // .aiTitle // empty' 2>/dev/null)
+    if [[ -n $last && $last == "$2" ]]; then
+      id=$(basename "$f" .jsonl)
+      n=$(( n + 1 ))
+    fi
+  done < <(find "$proj" -maxdepth 1 -name '*.jsonl' -mtime -7 2>/dev/null)
+
+  if (( n == 1 )); then
+    echo "$id"
+  fi
+}
+
+# Codex writes no title, so its session is known only when this folder has one Codex session this fortnight
+codex_session() {
+  local f line cwd id='' n=0
+  while IFS= read -r f; do
+    line=$(head -1 "$f" 2>/dev/null)
+    cwd=$(jq -r '.payload.cwd // empty' <<<"$line" 2>/dev/null)
+    if [[ $cwd == "$1" ]]; then
+      id=$(jq -r '.payload.id // empty' <<<"$line" 2>/dev/null)
+      n=$(( n + 1 ))
+    fi
+  done < <(find "$HOME/.codex/sessions" -name 'rollout-*.jsonl' -mtime -14 2>/dev/null)
+
+  if (( n == 1 )); then
+    echo "$id"
+  fi
+}
+
+# OpenCode keeps sessions in its database, with a title like Claude's, and with only one in the folder that is it
+opencode_session() {
+  local db=$HOME/.local/share/opencode/opencode.db rows q
+  if [[ ! -f $db ]] || ! command -v sqlite3 >/dev/null; then
+    return 0
+  fi
+
+  q="select id, title from session where parent_id is null and time_archived is null and directory = '${1//\'/\'\'}'"
+  rows=$(sqlite3 -readonly -separator "$sep" "$db" "$q" 2>/dev/null)
+  if [[ -n $2 ]] && [[ $(grep -c "$sep$2\$" <<<"$rows") == 1 ]]; then
+    grep "$sep$2\$" <<<"$rows" | cut -d "$sep" -f1
+  elif [[ -n $rows && $(wc -l <<<"$rows" | tr -d ' ') == 1 ]]; then
+    cut -d "$sep" -f1 <<<"$rows"
+  fi
+}
+
+# One line a pane: session, window index, pane index, kind, and the session id or the ssh target and session
+save() {
+  local sess widx pidx cmd path rsess host user title kind id out='' dup
+  while IFS=$sep read -r sess widx pidx cmd path rsess host user title; do
+    title=$(clean_title "$title")
+
+    case $cmd in
+      (claude) kind=claude id=$(claude_session "$path" "$title") ;;
+      (codex) kind=codex id=$(codex_session "$path") ;;
+      (opencode) kind=opencode id=$(opencode_session "$path" "$title") ;;
+      (*)
+        if [[ -n $rsess && -n $host ]]; then
+          kind=connect id="${user:+$user@}$host $rsess"
+        else
+          continue
+        fi
+        ;;
+    esac
+    out+="$sess$sep$widx$sep$pidx$sep$kind$sep$id"$'\n'
+  done < <(tmux list-panes -a -F "#{session_name}$sep#{window_index}$sep#{pane_index}$sep#{pane_current_command}$sep#{pane_current_path}$sep#{@remote_session}$sep#{@ssh_host}$sep#{@ssh_user}$sep#{pane_title}")
+
+  # A session two panes would both resume goes to the picker for both
+  for dup in $(printf '%s' "$out" | awk -F "$sep" '$4 != "connect" && $5 != "" { n[$4 FS $5]++ } END { for (k in n) if (n[k] > 1) { split(k, p, FS); print p[2] } }'); do
+    out=$(printf '%s' "$out" | awk -F "$sep" -v OFS="$sep" -v d="$dup" '$5 == d { $5 = "" } 1')$'\n'
+  done
+  state_write resume "$out"
+}
+
+# The command for a pane, built only from ids that look like ids, so nothing read from a file reaches a shell
+command_for() {
+  local kind=$1 id=$2 target name
+  case $kind in
+    (claude)
+      if [[ $id =~ $uuid_re ]]; then
+        echo "claude --resume $id"
+      else
+        echo "claude --resume"
+      fi
+      ;;
+    (codex)
+      if [[ $id =~ $uuid_re ]]; then
+        echo "codex resume $id"
+      else
+        echo "codex resume"
+      fi
+      ;;
+    (opencode)
+      if [[ $id =~ ^ses_[A-Za-z0-9]+$ ]]; then
+        echo "opencode --session $id"
+      else
+        echo "opencode"
+      fi
+      ;;
+    (connect)
+      target=${id%% *}
+      name=${id#* }
+      if [[ $target =~ ^[A-Za-z0-9_.@-]+$ && $name =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        printf "'%s' %s %s\n" "$dir/connect" "$target" "$name"
+      fi
+      ;;
+  esac
+}
+
+# Types each command into the pane resurrect recreated, only where that pane holds a plain shell
+restore() {
+  local sess widx pidx kind id pane cmd line
+  while IFS=$sep read -r sess widx pidx kind id; do
+    if [[ -z $sess ]]; then
+      continue
+    fi
+
+    pane="=$sess:$widx.$pidx"
+    if [[ ! $(tmux display -p -t "$pane" '#{pane_current_command}' 2>/dev/null) =~ $shells ]]; then
+      continue
+    fi
+
+    line=$(command_for "$kind" "$id")
+    if [[ -n $line ]]; then
+      tmux send-keys -t "$pane" -l "$line" \; send-keys -t "$pane" Enter
+    fi
+  done <<<"$(state_read resume)"
+}
+
+case ${1:-} in
+  (save) save ;;
+  (restore) restore ;;
+  (*) echo "usage: resume save|restore" >&2; exit 2 ;;
+esac

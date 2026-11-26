@@ -13,3 +13,13 @@ popup="-b rounded -s '$(option @agents-popup-style 'bg=#101010')' -S '$(option @
 tmux bind -N "Go to anywhere: agents, sessions, windows, servers" "$(option @agents-pick-key Space)" run-shell "tmux display-popup -E -c '#{client_name}' -w 70% -h 60% $popup -T ' go to ' \"'$dir/scripts/agents' pick '#{client_name}'\""
 tmux bind -N "Agents sidebar, open or close" "$(option @agents-sidebar-key a)" run-shell "'$dir/scripts/sidebar' toggle '#{window_id}'"
 tmux run-shell -b "'$dir/scripts/agents' watch"
+
+# With tmux-resurrect, note each agent's session on save and start it again after a restore. A hook you set
+# yourself is kept, set @agents-resume off to leave resurrect alone
+if [[ $(option @agents-resume on) == on ]]; then
+  for kind in save:post-save-all restore:post-restore-all; do
+    if [[ -z $(tmux show -gqv "@resurrect-hook-${kind#*:}") ]]; then
+      tmux set -g "@resurrect-hook-${kind#*:}" "'$dir/scripts/resume' ${kind%%:*}"
+    fi
+  done
+fi

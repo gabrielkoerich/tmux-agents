@@ -78,6 +78,21 @@ Then create the socket folder once with `mkdir -p ~/.ssh/cm && chmod 700 ~/.ssh/
 
 ssh takes the first value it finds for each option, so a `Host *` block above your host blocks would win over a value one of them sets. None of these options is usually set per host, so any `Host *` block works. The cost of sharing: when the shared connection dies, every window on that server drops at once, and each one reconnects through `connect`.
 
+## Agents come back after a restart
+
+With [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect), the plugin notes on every save which session each agent pane had, and after a restore it starts each agent again in its pane. It uses only what the agents already write, with no wrapper and no hook in the agent:
+
+| Agent | How it finds the session | Exact | Not sure |
+|---|---|---|---|
+| Claude Code | The pane's title, which Claude sets to the conversation title, matches the latest `ai-title` or `custom-title` of one transcript in `~/.claude/projects/<folder>/` | `claude --resume <id>` | `claude --resume`, the picker |
+| Codex | The folder had one Codex session in the last 14 days, from the `cwd` in `~/.codex/sessions` | `codex resume <id>` | `codex resume`, the picker |
+| OpenCode | The pane's title, or one session for the folder, in `opencode.db` | `opencode --session <id>` | `opencode` |
+| A space on a server | The pane `connect` opened | `connect <host> <session>` | |
+
+When two panes would get the same session, both get the picker, so a conversation never opens twice. The saved file holds pane, agent and id only. The command is built at restore time, and an id that does not look like one gives the picker, so nothing read from a transcript reaches a shell as typed.
+
+The plugin sets `@resurrect-hook-post-save-all` and `@resurrect-hook-post-restore-all` when they are empty, and leaves hooks you set yourself. Programs like nvim or lazygit are resurrect's own job, through `@resurrect-processes`. Set `@agents-resume off` to leave resurrect alone.
+
 ## Subagents
 
 A local Claude that runs subagents shows how many on its row, `⠿ suq · fix login  ⑂3  4m`. Claude keeps each subagent's transcript in `~/.claude/projects/<folder>/<session>/subagents/agent-*.jsonl`, and the watcher counts the ones written in the last 2 minutes, every 10 seconds. It reads names and times, never what the files hold. Two Claude sessions in one folder share the count, and a subagent quiet for over 2 minutes in one long tool call drops out until it writes again.
@@ -239,6 +254,7 @@ The picker takes its fzf colours from `@agents-fzf-colors`, so a theme can set t
 | `@agents-notify` | `on` | Desktop notifications |
 | `@agents-notify-app` | `com.mitchellh.ghostty` | Bundle id of the terminal a notification click brings forward |
 | `@agents-interval` | `2` | Seconds between scans |
+| `@agents-resume` | `on` | Start agents again after a tmux-resurrect restore |
 | `@agents-idle-after` | `600` | Seconds a finished turn waits before it counts as idle |
 | `@agents-services` | | `host:service` entries the watcher polls over ssh, `hermes` for now |
 | `@agents-services-interval` | `30` | Seconds between polls of services and of the sessions on pinned machines |
