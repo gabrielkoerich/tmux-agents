@@ -91,7 +91,13 @@ With [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect), the plugi
 
 When two panes would get the same session, both get the picker, so a conversation never opens twice. The saved file holds pane, agent and id only. The command is built at restore time, and an id that does not look like one gives the picker, so nothing read from a transcript reaches a shell as typed.
 
-The plugin sets `@resurrect-hook-post-save-all` and `@resurrect-hook-post-restore-all` when they are empty, and leaves hooks you set yourself. Programs like nvim or lazygit are resurrect's own job, through `@resurrect-processes`. Set `@agents-resume off` to leave resurrect alone.
+Restore types a command only into a pane that this restore created, where the pane's own shell is in front with no job and runs as you. Each saved set is used once, so a later manual restore types nothing into live shells.
+
+The plugin adds its command to `@resurrect-hook-post-save-all`, `@resurrect-hook-pre-restore-all` and `@resurrect-hook-post-restore-all` on a line of its own, after any hook you set yourself. Programs like nvim or lazygit are resurrect's own job, through `@resurrect-processes`. Set `@agents-resume off` to leave resurrect alone.
+
+### With tmux-osc-7577
+
+[tmux-osc-7577](https://github.com/gabrielkoerich/tmux-osc-7577) restores any program that reports its own resume command through OSC 7577. When it is installed, a save here skips every pane whose program reported itself and still runs, so a pane never gets two commands. `connect` reports itself, so a pane attached to a server comes back to the same remote session, and it sends a clear when you detach or the session ends. An agent that starts sending OSC 7577 moves over by itself, and the transcript matching above stays for the agents that do not.
 
 ## Subagents
 
